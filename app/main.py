@@ -38,14 +38,28 @@ class RepayRequest(BaseModel):
     amount: float = Field(gt=0)
 
 
+class AutonomousRunRequest(BaseModel):
+    cycles_per_agent: int = Field(default=1, ge=1, le=100)
+
+
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    return {"status": "ok", "api_gateway": "v10", "autonomous_agent_system": "v1"}
+
+
+@app.on_event("startup")
+def bootstrap_autonomous_system() -> None:
+    # Startup behavior for Autonomous Agent System v1.
+    world = engine.create_world("autonomous-bootstrap")
+    engine.create_agent(world.id, "orchestrator-alpha")
+    engine.create_agent(world.id, "builder-beta")
+    engine.initialize_autonomous_system(world.id)
 
 
 @app.post("/worlds")
 def create_world(payload: CreateWorldRequest) -> dict:
     world = engine.create_world(payload.name)
+    engine.initialize_autonomous_system(world.id)
     return engine.snapshot(world.id)
 
 
@@ -120,3 +134,23 @@ def repay(world_id: str, payload: RepayRequest) -> dict:
         return engine.snapshot(world_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/worlds/{world_id}/autonomous/run")
+def run_autonomous(world_id: str, payload: AutonomousRunRequest) -> dict:
+    try:
+        world = engine.get_world(world_id)
+        results = engine.scheduler.run_background_cycle(world, cycles_per_agent=payload.cycles_per_agent)
+        snapshot = engine.snapshot(world_id)
+        snapshot["autonomous_results"] = results
+        return snapshot
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/worlds/{world_id}/metrics")
+def get_metrics(world_id: str) -> dict:
+    try:
+        return engine.snapshot(world_id)["metrics"]
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

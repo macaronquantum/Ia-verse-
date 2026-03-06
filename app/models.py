@@ -48,6 +48,81 @@ class Company:
 
 
 @dataclass
+class ToolManifest:
+    id: str
+    creator_agent_id: str
+    name: str
+    description: str
+    energy_cost: float
+    execution_time: float
+    reputation: float = 1.0
+    success_rate: float = 0.5
+    price: float = 1.0
+
+
+@dataclass
+class AgentGoal:
+    id: str
+    agent_id: str
+    title: str
+    priority: int
+    reward: float
+    deadline_tick: Optional[int] = None
+    status: str = "pending"
+
+
+@dataclass
+class AgentTask:
+    id: str
+    goal_id: str
+    agent_id: str
+    title: str
+    status: str = "pending"
+    selected_tool_id: Optional[str] = None
+    result_summary: str = ""
+
+
+@dataclass
+class AgentMemoryRecord:
+    id: str
+    agent_id: str
+    memory_type: str
+    content: str
+    score: float = 0.0
+
+
+@dataclass
+class AgentTransaction:
+    id: str
+    agent_id: str
+    category: str
+    amount: float
+    metadata: str = ""
+
+
+@dataclass
+class AgentBusiness:
+    id: str
+    owner_agent_id: str
+    name: str
+    product: str
+    price: float
+    cost: float
+    revenue_streams: List[str]
+    target_users: List[str]
+
+
+@dataclass
+class AgentMessage:
+    id: str
+    sender_agent_id: str
+    recipient_agent_id: str
+    message_type: str
+    content: str
+    status: str = "queued"
+
+
+@dataclass
 class Bank:
     id: str
     accounts: Dict[str, Account] = field(default_factory=dict)
@@ -144,6 +219,25 @@ class World:
         }
     )
     event_log: List[str] = field(default_factory=list)
+    api_gateway_version: str = "v10"
+
+    # Autonomous Agent System v1 tables
+    agents_table: Dict[str, Dict[str, object]] = field(default_factory=dict)
+    agent_goals: Dict[str, AgentGoal] = field(default_factory=dict)
+    agent_tasks: Dict[str, AgentTask] = field(default_factory=dict)
+    agent_memory: Dict[str, AgentMemoryRecord] = field(default_factory=dict)
+    agent_transactions: Dict[str, AgentTransaction] = field(default_factory=dict)
+
+    # Extended economy tables
+    agent_revenue: Dict[str, float] = field(default_factory=dict)
+    agent_expenses: Dict[str, float] = field(default_factory=dict)
+    tool_revenue: Dict[str, float] = field(default_factory=dict)
+    marketplace_transactions: List[Dict[str, object]] = field(default_factory=list)
+
+    # Registry / marketplace / communication
+    tool_registry: Dict[str, ToolManifest] = field(default_factory=dict)
+    businesses: Dict[str, AgentBusiness] = field(default_factory=dict)
+    agent_network_messages: List[AgentMessage] = field(default_factory=list)
 
     def log(self, message: str) -> None:
         self.event_log.append(f"[tick {self.tick_count}] {message}")
