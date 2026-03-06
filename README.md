@@ -59,3 +59,15 @@ L'architecture est pensée pour être enrichie (nouvelles ressources, fiscalité
 ```bash
 python -m pytest -q
 ```
+
+## Autonomous Startup Engine (new)
+
+Additional modules implement opportunity scanning, business provisioning, tool publishing, billing reserve/refund, judge controls and human marketplace stubs.
+
+### New commands
+
+```bash
+bash scripts/bootstrap_opportunities.sh
+bash scripts/run_agents_workers.sh
+python scripts/simulate_human_workers.py
+```
