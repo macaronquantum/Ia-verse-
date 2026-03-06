@@ -4,16 +4,23 @@ from dataclasses import asdict
 from typing import Dict
 from uuid import uuid4
 
+from app.agents.mind import AgentMind
 from app.models import Agent, Company, Resource, World
+from app.world.crisis_engine import CrisisEngine
+from app.world.state import GlobalState
 
 
 class WorldEngine:
     def __init__(self) -> None:
         self.worlds: Dict[str, World] = {}
+        self.minds: Dict[str, Dict[str, AgentMind]] = {}
+        self.crisis_engines: Dict[str, CrisisEngine] = {}
 
     def create_world(self, name: str) -> World:
         world = World(id=str(uuid4()), name=name)
         self.worlds[world.id] = world
+        self.minds[world.id] = {}
+        self.crisis_engines[world.id] = CrisisEngine()
         world.log(f"World '{name}' created")
         return world
 
@@ -27,6 +34,7 @@ class WorldEngine:
         world = self.get_world(world_id)
         agent = Agent(id=str(uuid4()), name=name)
         world.agents[agent.id] = agent
+        self.minds[world_id][agent.id] = AgentMind(agent)
         world.bank.ensure_account(agent.id)
         world.log(f"Agent '{name}' joined the world")
         return agent
@@ -79,8 +87,15 @@ class WorldEngine:
         world = self.get_world(world_id)
         for _ in range(steps):
             world.tick_count += 1
+            global_state = GlobalState.from_world(world)
             self._run_agent_ai(world)
             self._run_economy(world)
+            crisis_engine = self.crisis_engines[world_id]
+            crises = crisis_engine.evaluate(world, global_state)
+            for event in crisis_engine.apply_effects(world):
+                world.log(f"Crisis engine: {event}")
+            if any(level > 0 for level in crises.values()):
+                world.log(f"Active crises: {crises}")
             world.bank.apply_interest()
         return world
 
@@ -121,6 +136,11 @@ class WorldEngine:
 
     def _run_agent_ai(self, world: World) -> None:
         for agent in world.agents.values():
+            mind = self.minds[world.id][agent.id]
+            global_state = GlobalState.from_world(world)
+            actions = mind.run_cycle(world, global_state)
+            world.log(f"Agent '{agent.name}' cognition cycle actions: {actions}")
+
             if not agent.company_id and agent.wallet >= 120:
                 self.create_company(world.id, agent.id, f"{agent.name}-industries")
                 agent.wallet -= 80
