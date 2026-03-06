@@ -36,3 +36,21 @@ def test_loan_repayment_reduces_or_closes_loan() -> None:
     loans = {loan["id"]: loan for loan in snapshot["bank"]["loans"]}
     assert loan_id in loans
     assert loans[loan_id]["remaining"] < 100
+
+
+def test_autonomous_agent_system_generates_tasks_memory_and_metrics() -> None:
+    engine = WorldEngine()
+    world = engine.create_world("autonomous-world")
+    agent = engine.create_agent(world.id, "Delta")
+    engine.initialize_autonomous_system(world.id)
+
+    results = engine.scheduler.run_background_cycle(world, cycles_per_agent=2)
+    snapshot = engine.snapshot(world.id)
+
+    assert agent.id in results
+    assert snapshot["api_gateway_version"] == "v10"
+    assert len(snapshot["agent_goals"]) > 0
+    assert len(snapshot["agent_tasks"]) > 0
+    assert len(snapshot["agent_memory"]) > 0
+    assert "agent_revenue" in snapshot["metrics"]
+    assert "agent_success_rate" in snapshot["metrics"]

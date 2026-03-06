@@ -1,20 +1,24 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from typing import Any
 from typing import Dict
 from uuid import uuid4
 
-from app.models import Agent, Company, Resource, World
+from app.agents.scheduler import AutonomousScheduler
+from app.models import Agent, AgentTransaction, Company, Resource, ToolManifest, World
 
 
 class WorldEngine:
     def __init__(self) -> None:
         self.worlds: Dict[str, World] = {}
+        self.scheduler = AutonomousScheduler()
 
     def create_world(self, name: str) -> World:
         world = World(id=str(uuid4()), name=name)
         self.worlds[world.id] = world
         world.log(f"World '{name}' created")
+        self._seed_registry(world)
         return world
 
     def get_world(self, world_id: str) -> World:
@@ -28,6 +32,17 @@ class WorldEngine:
         agent = Agent(id=str(uuid4()), name=name)
         world.agents[agent.id] = agent
         world.bank.ensure_account(agent.id)
+        world.agents_table[agent.id] = {
+            "agent_id": agent.id,
+            "agent_wallet": agent.wallet,
+            "energy_balance": 100.0,
+            "reputation_score": 1.0,
+            "skills": ["planning", "execution"],
+            "created_tools": [],
+            "businesses": [],
+        }
+        world.agent_revenue.setdefault(agent.id, 0.0)
+        world.agent_expenses.setdefault(agent.id, 0.0)
         world.log(f"Agent '{name}' joined the world")
         return agent
 
@@ -80,6 +95,7 @@ class WorldEngine:
         for _ in range(steps):
             world.tick_count += 1
             self._run_agent_ai(world)
+            self.scheduler.run_background_cycle(world, cycles_per_agent=1)
             self._run_economy(world)
             world.bank.apply_interest()
         return world
@@ -101,6 +117,19 @@ class WorldEngine:
             "market_prices": {k.value: v for k, v in world.market_prices.items()},
             "global_resources": {k.value: v for k, v in world.global_resources.items()},
             "event_log": world.event_log[-100:],
+            "api_gateway_version": world.api_gateway_version,
+            "agents_table": list(world.agents_table.values()),
+            "agent_goals": [asdict(v) for v in world.agent_goals.values()],
+            "agent_tasks": [asdict(v) for v in world.agent_tasks.values()],
+            "agent_memory": [asdict(v) for v in world.agent_memory.values()],
+            "agent_transactions": [asdict(v) if isinstance(v, AgentTransaction) else v for v in world.agent_transactions.values()],
+            "agent_revenue": world.agent_revenue,
+            "agent_expenses": world.agent_expenses,
+            "tool_revenue": world.tool_revenue,
+            "marketplace_transactions": world.marketplace_transactions,
+            "tool_registry": [asdict(v) for v in world.tool_registry.values()],
+            "businesses": [asdict(v) for v in world.businesses.values()],
+            "metrics": self._metrics(world),
         }
 
     def _get_wallet(self, world: World, owner_id: str) -> float:
@@ -183,3 +212,50 @@ class WorldEngine:
                 company.productivity *= 1.05
                 company.cash -= 50
                 world.log(f"{company.name} invested in productivity")
+
+    def initialize_autonomous_system(self, world_id: str) -> None:
+        world = self.get_world(world_id)
+        # Startup behavior: load tools/connectors/start scheduler/launch loops.
+        self._seed_registry(world)
+        world.log("Autonomous Agent System v1 initialized (gateway=v10, connectors=ready)")
+
+    def _seed_registry(self, world: World) -> None:
+        if world.tool_registry:
+            return
+        default_tools = [
+            ToolManifest(
+                id=str(uuid4()),
+                creator_agent_id="system",
+                name="market-analyzer",
+                description="Analyzes marketplace demand",
+                energy_cost=1.0,
+                execution_time=0.8,
+                reputation=2.0,
+                success_rate=0.7,
+                price=3.0,
+            ),
+            ToolManifest(
+                id=str(uuid4()),
+                creator_agent_id="system",
+                name="api-publisher",
+                description="Publishes monetizable APIs",
+                energy_cost=1.2,
+                execution_time=1.1,
+                reputation=1.7,
+                success_rate=0.68,
+                price=3.5,
+            ),
+        ]
+        for tool in default_tools:
+            world.tool_registry[tool.id] = tool
+
+    def _metrics(self, world: World) -> Dict[str, Any]:
+        total_tasks = len(world.agent_tasks)
+        done_tasks = len([t for t in world.agent_tasks.values() if t.status == "done"])
+        success_rate = (done_tasks / total_tasks) if total_tasks else 0.0
+        return {
+            "agent_revenue": sum(world.agent_revenue.values()),
+            "tools_created": len([t for t in world.tool_registry.values() if t.creator_agent_id != "system"]),
+            "businesses_created": len(world.businesses),
+            "agent_success_rate": success_rate,
+        }
