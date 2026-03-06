@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: ia-verse-postgres
+    environment:
+      POSTGRES_USER: iaverse
+      POSTGRES_PASSWORD: iaverse
+      POSTGRES_DB: ia_verse
+    ports: ["5432:5432"]
+  redis:
+    image: redis:7
+    container_name: ia-verse-redis
+    ports: ["6379:6379"]
+  app:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: postgresql://iaverse:iaverse@postgres:5432/ia_verse
+      REDIS_URL: redis://redis:6379/0
+    ports: ["8000:8000"]
+    depends_on: [postgres, redis]

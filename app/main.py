@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
+from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
+from app.api.monitoring import router as monitoring_router
+from app.api_gateway import gateway
 from app.simulation import WorldEngine
 
-
 app = FastAPI(title="IA-Verse Backend", version="1.0.0")
+app.include_router(monitoring_router)
 engine = WorldEngine()
 
 
@@ -38,9 +41,69 @@ class RepayRequest(BaseModel):
     amount: float = Field(gt=0)
 
 
+class GatewayRequest(BaseModel):
+    agent_id: str
+    payload: dict = Field(default_factory=dict)
+
+
+def _require_role(role: str | None) -> None:
+    if role not in {"admin", "agent"}:
+        raise HTTPException(status_code=403, detail="missing role")
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/dashboard")
+def dashboard() -> FileResponse:
+    return FileResponse("web/dashboard/index.html")
+
+
+@app.get("/metrics")
+def metrics_prometheus() -> PlainTextResponse:
+    body = "\n".join(["# TYPE iaverse_agents gauge", "iaverse_agents 0"])
+    return PlainTextResponse(body)
+
+
+@app.post("/gateway/create_wallet")
+def gw_create_wallet(req: GatewayRequest, x_role: str | None = Header(default=None)) -> dict:
+    _require_role(x_role)
+    return gateway.create_wallet(req.agent_id, req.payload.get("network", "solana"))
+
+
+@app.post("/gateway/transfer_funds")
+def gw_transfer(req: GatewayRequest, x_role: str | None = Header(default=None)) -> dict:
+    _require_role(x_role)
+    p = req.payload
+    return gateway.transfer_funds(req.agent_id, p["from"], p["to"], p.get("asset", "CORE"), float(p["amount"]))
+
+
+@app.post("/gateway/place_order")
+def gw_place(req: GatewayRequest, x_role: str | None = Header(default=None)) -> dict:
+    _require_role(x_role)
+    return gateway.place_order(req.agent_id, req.payload["market"], req.payload["order_spec"])
+
+
+@app.post("/gateway/call_third_party")
+def gw_third(req: GatewayRequest, x_role: str | None = Header(default=None)) -> dict:
+    _require_role(x_role)
+    return gateway.call_third_party(req.agent_id, req.payload["service_name"], req.payload.get("payload", {}))
+
+
+@app.post("/gateway/request_llm")
+def gw_llm(req: GatewayRequest, x_role: str | None = Header(default=None)) -> dict:
+    _require_role(x_role)
+    p = req.payload
+    return gateway.request_llm(req.agent_id, p["model"], p["prompt"], int(p.get("budget_tokens", 128)))
+
+
+@app.post("/gateway/create_tool")
+def gw_tool(req: GatewayRequest, x_role: str | None = Header(default=None)) -> dict:
+    _require_role(x_role)
+    p = req.payload
+    return gateway.create_tool(req.agent_id, p["manifest"], p.get("code_stub", ""))
 
 
 @app.post("/worlds")
