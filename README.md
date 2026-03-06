@@ -59,3 +59,32 @@ L'architecture est pensée pour être enrichie (nouvelles ressources, fiscalité
 ```bash
 python -m pytest -q
 ```
+
+## API Gateway v10 (LA-VERSE)
+
+### Démarrage rapide gateway
+```bash
+./scripts/setup_gateway_dev.sh
+./scripts/run_gateway.sh
+```
+
+### Ajouter un connecteur
+1. Créer `app/integrations/<name>_client.py` avec une classe client.
+2. Enregistrer le service via `POST /services/register` (role admin).
+3. Déclarer `external_dependencies` dans le `ToolManifest`.
+
+### Publier un tool
+1. `POST /tools/register`
+2. `POST /tools/{id}/test`
+3. `POST /tools/publish?tool_id=...` avec signature
+
+### Appeler un tool
+- Estimer: `POST /gateway/estimate`
+- Exécuter: `POST /tools/{id}/call` (pré-autorisation CoreEnergy)
+
+### Notes de sécurité
+- Auth headers (`x-agent-id`, `x-role`) et RBAC.
+- Secrets via variables d’environnement chiffrables (stub dev-mode).
+- Sandbox runner isolé avec timeouts + limites ressources.
+- Logs d’usage tamper-evident (chaîne SHA256).
+- Quotas per-agent per-tool + pénalité réputation.

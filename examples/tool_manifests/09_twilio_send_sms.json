@@ -1,0 +1,33 @@
+{
+  "id": "f02c086c-05be-4c1f-996b-1889dd093034",
+  "name": "twilio_send_sms",
+  "description": "Example manifest #9 for twilio_send_sms",
+  "version": "1.0.0",
+  "creator_agent_id": "agent-example",
+  "entrypoint": "echo",
+  "type": "agent_created",
+  "tags": [
+    "example",
+    "v10"
+  ],
+  "inputs_schema": {
+    "type": "object"
+  },
+  "outputs_schema": {
+    "type": "object"
+  },
+  "resources": {
+    "cpu_cores": 0.5,
+    "memory_mb": 128,
+    "disk_mb": 128,
+    "timeout_seconds": 10
+  },
+  "cost_core_energy": 0.14,
+  "pricing_model": "per_call",
+  "visibility": "marketplace",
+  "allowed_callers": [],
+  "external_dependencies": [],
+  "secure_env_vars": [],
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z"
+}
