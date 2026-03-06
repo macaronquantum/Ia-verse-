@@ -1,61 +1,69 @@
-# IA-Verse Backend (jeu économique virtuel)
+# LA-VERSE Bootstrap + Runner + Gateway
 
-Ce dépôt contient un backend complet de simulation pour un monde virtuel piloté par des IA.
+## Prérequis
+- Python 3.11+
+- Docker + Docker Compose
+- tmux (recommandé sur macOS)
 
-## Fonctionnalités
+## Variables d'environnement
+Copier `.env.example` vers `.env` puis adapter:
+- `TICK_SECONDS=5`
+- `CORE_ENERGY_SUPPLY=10000`
+- `CORE_EXCHANGE_RATE=1000000`
+- `SETTLEMENT_TIME=00:00`
+- `MINT_PRIVATE_KEY=...`
+- `DEV_ALLOW_MINT=false` (mettre `true` en local si besoin)
+- `ALCHEMY_API_KEY=...`
 
-- **Monde virtuel** avec ressources globales (`energy`, `food`, `metal`, `knowledge`).
-- **Agents IA** qui prennent des décisions automatiquement à chaque tick.
-- **Banque**:
-  - ouverture de comptes pour agents et entreprises,
-  - dépôts / retraits,
-  - prêts,
-  - remboursement des prêts,
-  - intérêts appliqués périodiquement.
-- **Entreprises**:
-  - création,
-  - achat de matières,
-  - production de biens,
-  - vente automatique sur un marché simplifié.
-- **Moteur de simulation** par ticks (un tick = un cycle économique).
-- **API REST FastAPI** pour manipuler le monde et lancer la simulation.
-
-## Lancer le serveur
-
+## Bootstrap du monde
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+python scripts/world_bootstrap.py
+```
+Crée 5 banques centrales régionales + allocations CoreEnergy + agents initiaux.
+
+## Lancer toute la stack
+```bash
+./scripts/run_all.sh
+```
+- Postgres + Redis via `docker-compose.dev.yml`
+- FastAPI
+- Worker simulation (`run_worker.py --tick-seconds 5`)
+
+## Runner simple
+```bash
+./scripts/run_simulation.sh 5
 ```
 
-Le serveur sera disponible sur `http://127.0.0.1:8000`.
+## Settlement journalier
+```bash
+python scripts/settlement_daily.py
+```
+Produit un reçu JSON dans `receipts/`.
 
-## Endpoints principaux
+## Dashboard
+- URL: `http://localhost:8000/dashboard`
+- Monitoring API:
+  - `/monitoring/health`
+  - `/monitoring/metrics`
+  - `/monitoring/top_agents`
+  - `/monitoring/world_map`
+  - `/monitoring/logs`
+  - websocket `/monitoring/events`
 
-- `POST /worlds` : créer un nouveau monde
-- `GET /worlds/{world_id}` : état détaillé du monde
-- `POST /worlds/{world_id}/agents` : créer un agent IA
-- `POST /worlds/{world_id}/companies` : créer une entreprise
-- `POST /worlds/{world_id}/tick` : exécuter N ticks de simulation
-- `POST /worlds/{world_id}/bank/deposit` : dépôt
-- `POST /worlds/{world_id}/bank/withdraw` : retrait
-- `POST /worlds/{world_id}/bank/loan` : demander un prêt
-- `POST /worlds/{world_id}/bank/repay` : rembourser un prêt
+## API Gateway (exemples)
+- `POST /gateway/create_wallet`
+- `POST /gateway/transfer_funds`
+- `POST /gateway/place_order`
+- `POST /gateway/call_third_party`
+- `POST /gateway/request_llm`
+- `POST /gateway/create_tool`
 
-## Philosophie de simulation
+Tous les appels gateway appliquent quota + coût CoreEnergy et passent par un service registry (stubs inclus, Alchemy stub prêt à remplacer).
 
-Le système inclut une IA de décision simple et extensible:
-
-- un agent sans entreprise essaie d'en créer une,
-- sinon il travaille, produit, vend et gère ses liquidités,
-- il peut demander un prêt si sa trésorerie est faible,
-- les prêts produisent des intérêts à chaque tick.
-
-L'architecture est pensée pour être enrichie (nouvelles ressources, fiscalité, contrats, diplomatie, etc.).
+## Human jobs
+Le pipeline `app/oracles/jobs.py` permet de poster des tâches humaines simulées (`post_human_job`) complétées après quelques ticks (`process_jobs_tick`).
 
 ## Tests
-
 ```bash
 python -m pytest -q
 ```

@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>LA-Verse Dashboard</title></head>
+<body>
+<h1>LA-Verse Dashboard</h1>
+<div id="metrics"></div>
+<pre id="events"></pre>
+<script>
+async function load(){
+  const m=await fetch('/monitoring/metrics').then(r=>r.json());
+  const w=await fetch('/monitoring/world_map').then(r=>r.json());
+  document.getElementById('metrics').innerText=JSON.stringify({metrics:m,world_map:w},null,2);
+}
+load();
+const ws = new WebSocket(`ws://${location.host}/monitoring/events`);
+ws.onmessage = (e)=>{document.getElementById('events').textContent += e.data+'\n';};
+</script>
+</body>
+</html>
