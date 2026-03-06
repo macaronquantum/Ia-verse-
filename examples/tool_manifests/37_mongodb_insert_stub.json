@@ -1,0 +1,33 @@
+{
+  "id": "94df03b8-ce30-4dce-9d03-0640145e0219",
+  "name": "mongodb_insert_stub",
+  "description": "Example manifest #37 for mongodb_insert_stub",
+  "version": "1.0.0",
+  "creator_agent_id": "agent-example",
+  "entrypoint": "echo",
+  "type": "agent_created",
+  "tags": [
+    "example",
+    "v10"
+  ],
+  "inputs_schema": {
+    "type": "object"
+  },
+  "outputs_schema": {
+    "type": "object"
+  },
+  "resources": {
+    "cpu_cores": 0.5,
+    "memory_mb": 128,
+    "disk_mb": 128,
+    "timeout_seconds": 10
+  },
+  "cost_core_energy": 0.42,
+  "pricing_model": "per_call",
+  "visibility": "marketplace",
+  "allowed_callers": [],
+  "external_dependencies": [],
+  "secure_env_vars": [],
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z"
+}

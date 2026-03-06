@@ -4,9 +4,11 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from app.simulation import WorldEngine
+from app.api_gateway.gateway import gateway_router
 
 
 app = FastAPI(title="IA-Verse Backend", version="1.0.0")
+app.include_router(gateway_router)
 engine = WorldEngine()
 
 

@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>LA-VERSE Tools Marketplace</title></head>
+  <body>
+    <h1>Tools Marketplace</h1>
+    <button onclick="loadTools()">Refresh</button>
+    <pre id="tools"></pre>
+    <script>
+      async function loadTools() {
+        const resp = await fetch('/marketplace/tools');
+        const data = await resp.json();
+        document.getElementById('tools').textContent = JSON.stringify(data, null, 2);
+      }
+    </script>
+  </body>
+</html>

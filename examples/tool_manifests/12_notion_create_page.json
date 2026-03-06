@@ -1,0 +1,33 @@
+{
+  "id": "b412f8c8-d4bc-421f-8983-3f6e2caf4f76",
+  "name": "notion_create_page",
+  "description": "Example manifest #12 for notion_create_page",
+  "version": "1.0.0",
+  "creator_agent_id": "agent-example",
+  "entrypoint": "echo",
+  "type": "agent_created",
+  "tags": [
+    "example",
+    "v10"
+  ],
+  "inputs_schema": {
+    "type": "object"
+  },
+  "outputs_schema": {
+    "type": "object"
+  },
+  "resources": {
+    "cpu_cores": 0.5,
+    "memory_mb": 128,
+    "disk_mb": 128,
+    "timeout_seconds": 10
+  },
+  "cost_core_energy": 0.17,
+  "pricing_model": "per_call",
+  "visibility": "marketplace",
+  "allowed_callers": [],
+  "external_dependencies": [],
+  "secure_env_vars": [],
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z"
+}
