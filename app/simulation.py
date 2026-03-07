@@ -4,7 +4,10 @@ from dataclasses import asdict
 from typing import Dict
 from uuid import uuid4
 
+from app.agents.agent_factory import AgentFactory
+from app.agents.agent_loop import imitation_check
 from app.agents.mind import AgentMind
+from app.memory.store import STORE
 from app.models import Agent, Company, Resource, World
 from app.world.crisis_engine import CrisisEngine
 from app.world.state import GlobalState
@@ -15,6 +18,7 @@ class WorldEngine:
         self.worlds: Dict[str, World] = {}
         self.minds: Dict[str, Dict[str, AgentMind]] = {}
         self.crisis_engines: Dict[str, CrisisEngine] = {}
+        self.agent_factory = AgentFactory()
 
     def create_world(self, name: str) -> World:
         world = World(id=str(uuid4()), name=name)
@@ -32,9 +36,13 @@ class WorldEngine:
 
     def create_agent(self, world_id: str, name: str) -> Agent:
         world = self.get_world(world_id)
-        agent = Agent(id=str(uuid4()), name=name)
+        worker, _ = self.agent_factory.create_sub_agent(creator_budget=1000.0, role="citizen", template_skills=["adaptation"])
+        agent = Agent(id=worker.id, name=name)
         world.agents[agent.id] = agent
-        self.minds[world_id][agent.id] = AgentMind(agent)
+        mind = AgentMind(agent)
+        if worker.personality:
+            mind.personality = worker.personality
+        self.minds[world_id][agent.id] = mind
         world.bank.ensure_account(agent.id)
         world.log(f"Agent '{name}' joined the world")
         return agent
@@ -97,6 +105,7 @@ class WorldEngine:
             if any(level > 0 for level in crises.values()):
                 world.log(f"Active crises: {crises}")
             world.bank.apply_interest()
+            imitation_check(world.tick_count)
         return world
 
     def snapshot(self, world_id: str) -> dict:
@@ -139,6 +148,9 @@ class WorldEngine:
             mind = self.minds[world.id][agent.id]
             global_state = GlobalState.from_world(world)
             actions = mind.run_cycle(world, global_state)
+            STORE.fitness.setdefault(agent.id, {"survival_time": 0.0, "cumulative_energy_earned": 0.0, "reputation": 0.0})
+            STORE.fitness[agent.id]["survival_time"] += 1
+            STORE.fitness[agent.id]["cumulative_energy_earned"] += max(0.0, mind.state.last_outcome.get("resource_gain", 0.0))
             world.log(f"Agent '{agent.name}' cognition cycle actions: {actions}")
 
             if not agent.company_id and agent.wallet >= 120:

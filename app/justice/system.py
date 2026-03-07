@@ -18,6 +18,12 @@ class JudgeSystem:
         self.auto_block_threshold = auto_block_threshold
         self.violations: dict[str, int] = {}
         self.blocked_agents: set[str] = set()
+        self.suspect_events: list[dict] = []
+
+
+    def register_suspect_event(self, agent_id: str, event_data: dict) -> None:
+        self.suspect_events.append({"agent_id": agent_id, "event_data": event_data})
+        self._violate(agent_id)
 
     def review_action(self, agent_id: str, action: str, amount: float = 0.0) -> AuditDecision:
         lowered = action.lower()
@@ -35,3 +41,6 @@ class JudgeSystem:
         self.violations[agent_id] = self.violations.get(agent_id, 0) + 1
         if self.violations[agent_id] >= self.auto_block_threshold:
             self.blocked_agents.add(agent_id)
+
+
+justice = JudgeSystem()

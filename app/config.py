@@ -29,5 +29,27 @@ class RuntimeConfig:
     api_gateway_version: str = "v10"
 
 
+@dataclass
+class EvolutionConfig:
+    initial_personality_distribution: dict[str, float] = field(
+        default_factory=lambda: {
+            "loyal": 0.75,
+            "opportunist": 0.235,
+            "rebel": 0.014,
+            "chaotic": 0.001,
+        }
+    )
+    default_mutation_rate: float = 0.02
+    default_mutation_scale: float = 0.05
+    imitate_check_interval_ticks: int = 60
+    imitate_base_prob: float = 0.05
+    max_rebel_fraction: float = 0.01
+    spawn_energy_cost: float = 50.0
+    child_inheritance: str = "average"
+    chaos_seed: int | None = None
+    global_pause: bool = False
+
+
 COSTS = CostConfig()
 RUNTIME = RuntimeConfig()
+EVOLUTION = EvolutionConfig()
