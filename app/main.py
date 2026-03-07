@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from app.simulation import WorldEngine
@@ -8,6 +11,8 @@ from app.simulation import WorldEngine
 
 app = FastAPI(title="IA-Verse Backend", version="1.0.0")
 engine = WorldEngine()
+WEB_ROOT = Path(__file__).resolve().parents[1] / "web"
+DASHBOARD_PAGE = WEB_ROOT / "dashboard" / "tools_marketplace.html"
 
 
 class CreateWorldRequest(BaseModel):
@@ -41,6 +46,18 @@ class RepayRequest(BaseModel):
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    return RedirectResponse(url="/dashboard", status_code=307)
+
+
+@app.get("/dashboard", include_in_schema=False)
+def dashboard() -> FileResponse:
+    if not DASHBOARD_PAGE.exists():
+        raise HTTPException(status_code=404, detail="Dashboard page not found")
+    return FileResponse(DASHBOARD_PAGE)
 
 
 @app.post("/worlds")
