@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from app.api.monitoring import router as monitoring_router
 from pydantic import BaseModel, Field
 
 from app.simulation import WorldEngine
@@ -120,3 +122,14 @@ def repay(world_id: str, payload: RepayRequest) -> dict:
         return engine.snapshot(world_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+app.include_router(monitoring_router)
+
+@app.get("/dashboard")
+def dashboard() -> FileResponse:
+    return FileResponse("web/dashboard/index.html")
+
+@app.get("/dashboard/{asset}")
+def dashboard_assets(asset: str) -> FileResponse:
+    return FileResponse(f"web/dashboard/{asset}")
