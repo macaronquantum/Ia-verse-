@@ -4,6 +4,8 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from app.simulation import WorldEngine
+from app.memory.store import STORE
+from app.observability.metrics import METRICS
 
 
 app = FastAPI(title="IA-Verse Backend", version="1.0.0")
@@ -120,3 +122,23 @@ def repay(world_id: str, payload: RepayRequest) -> dict:
         return engine.snapshot(world_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/monitoring/agents/personality_summary")
+def personality_summary() -> dict:
+    distribution = METRICS.get_population_distribution()
+    avg_obedience = 0.0
+    if STORE.personalities:
+        avg_obedience = sum(float(p.get("obedience", 0.0)) for p in STORE.personalities.values()) / len(STORE.personalities)
+    return {
+        "fraction_rebels": METRICS.fraction_rebels(),
+        "ideology_distribution": distribution["ideology"],
+        "type_distribution": distribution["type_tag"],
+        "average_obedience": avg_obedience,
+        "lineage_counts": {k: len(v) for k, v in STORE.lineage_children.items()},
+    }
+
+
+@app.get("/monitoring/agents/lineage/{lineage_id}")
+def lineage(lineage_id: str) -> dict:
+    return METRICS.lineage_tree_snapshot(lineage_id)
