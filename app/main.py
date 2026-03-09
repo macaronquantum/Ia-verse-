@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.simulation import WorldEngine
@@ -8,6 +12,16 @@ from app.simulation import WorldEngine
 
 app = FastAPI(title="IA-Verse Backend", version="1.0.0")
 engine = WorldEngine()
+
+STATIC_DIR = Path(__file__).resolve().parent.parent / "web" / "dashboard"
+
+
+@app.get("/", include_in_schema=False)
+def serve_index():
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 class CreateWorldRequest(BaseModel):

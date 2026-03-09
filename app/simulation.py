@@ -90,6 +90,7 @@ class WorldEngine:
             global_state = GlobalState.from_world(world)
             self._run_agent_ai(world)
             self._run_economy(world)
+            self._regenerate_resources(world)
             crisis_engine = self.crisis_engines[world_id]
             crises = crisis_engine.evaluate(world, global_state)
             for event in crisis_engine.apply_effects(world):
@@ -97,6 +98,7 @@ class WorldEngine:
             if any(level > 0 for level in crises.values()):
                 world.log(f"Active crises: {crises}")
             world.bank.apply_interest()
+            self._pay_dividends(world)
         return world
 
     def snapshot(self, world_id: str) -> dict:
@@ -117,6 +119,28 @@ class WorldEngine:
             "global_resources": {k.value: v for k, v in world.global_resources.items()},
             "event_log": world.event_log[-100:],
         }
+
+    def _regenerate_resources(self, world: World) -> None:
+        regen_rates = {
+            Resource.ENERGY: 50.0,
+            Resource.FOOD: 30.0,
+            Resource.METAL: 20.0,
+            Resource.KNOWLEDGE: 10.0,
+        }
+        for resource, rate in regen_rates.items():
+            cap = 15000.0
+            current = world.global_resources[resource]
+            if current < cap:
+                world.global_resources[resource] = min(cap, current + rate)
+
+    def _pay_dividends(self, world: World) -> None:
+        for company in world.companies.values():
+            if company.cash > 300:
+                dividend = company.cash * 0.05
+                company.cash -= dividend
+                owner = world.agents.get(company.owner_agent_id)
+                if owner:
+                    owner.wallet += dividend
 
     def _get_wallet(self, world: World, owner_id: str) -> float:
         if owner_id in world.agents:
@@ -151,8 +175,11 @@ class WorldEngine:
 
             if agent.company_id:
                 company = world.companies[agent.company_id]
-                company.cash += 10
-                world.log(f"Agent '{agent.name}' worked for company '{company.name}' (+10 cash)")
+                wage = min(10.0, agent.wallet)
+                if wage > 0:
+                    agent.wallet -= wage
+                    company.cash += wage
+                    world.log(f"Agent '{agent.name}' worked for company '{company.name}' (+{wage:.1f} cash)")
 
                 if company.cash < 25:
                     try:
@@ -194,6 +221,8 @@ class WorldEngine:
             )
             company.inventory[Resource.FOOD] -= sold_food
             company.inventory[Resource.KNOWLEDGE] -= sold_knowledge
+            world.global_resources[Resource.FOOD] += sold_food
+            world.global_resources[Resource.KNOWLEDGE] += sold_knowledge
             company.cash += revenue
 
             if revenue > 0:

@@ -53,7 +53,7 @@ class Bank:
     accounts: Dict[str, Account] = field(default_factory=dict)
     loans: Dict[str, Loan] = field(default_factory=dict)
     reserve: float = 100000.0
-    base_interest_rate: float = 0.02
+    base_interest_rate: float = 2.0
 
     def ensure_account(self, owner_id: str) -> Account:
         if owner_id not in self.accounts:
@@ -116,7 +116,8 @@ class Bank:
 
     def apply_interest(self) -> None:
         for loan in self.loans.values():
-            loan.remaining *= 1 + loan.interest_rate
+            per_tick_rate = loan.interest_rate / 10000.0
+            loan.remaining *= 1 + per_tick_rate
 
 
 @dataclass
