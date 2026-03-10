@@ -1,0 +1,44 @@
+version: '3.9'
+services:
+  app:
+    build: ..
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+      - postgres
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: iaverse
+      POSTGRES_USER: iaverse
+      POSTGRES_PASSWORD: iaverse
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  browserless:
+    image: browserless/chrome:latest
+    environment:
+      MAX_CONCURRENT_SESSIONS: 10
+    ports:
+      - "3000:3000"
+    profiles: ["web"]
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    profiles: ["monitoring"]
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    profiles: ["monitoring"]
+volumes:
+  pgdata:
