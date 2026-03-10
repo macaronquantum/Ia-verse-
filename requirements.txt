@@ -7,3 +7,5 @@ pydantic==2.9.2
 pytest==8.3.3
 uvicorn==0.32.0
 anthropic
+duckduckgo-search
+ddgs

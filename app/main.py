@@ -311,6 +311,7 @@ def get_agent_profile(agent_id: str) -> dict:
         } for l in world.bank.get_loans(agent.id)],
         "transactions": [tx.to_dict() for tx in world.transactions
                          if tx.from_id == agent.id or tx.to_id == agent.id][-50:],
+        "web_searches": engine.web_search.get_agent_search_history(agent.id),
     }
 
 

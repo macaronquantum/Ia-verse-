@@ -8,6 +8,7 @@ import logging
 
 from app.models import Agent, Company, World
 from app.energy.core import EnergyLedger, EnergyConfig
+from app.web_search import WebSearchEngine, SEARCH_ENERGY_COST
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,7 @@ class WorldEngine:
         self.energy_ledgers: Dict[str, EnergyLedger] = {}
         self.scheduler = AutonomousScheduler()
         self._llm = None
+        self.web_search = WebSearchEngine()
 
     @property
     def llm(self):
@@ -280,6 +282,8 @@ class WorldEngine:
             if acct:
                 bank_balance = acct.balance
 
+            web_knowledge = self.web_search.get_agent_knowledge(agent.id)
+
             agent_state = {
                 "name": agent.name,
                 "type": agent.agent_type,
@@ -292,6 +296,7 @@ class WorldEngine:
                 "company_cash": round(company.cash, 2) if company else 0,
                 "bank_balance": round(bank_balance, 2),
                 "alive": agent.alive,
+                "web_knowledge": web_knowledge,
             }
 
             try:
@@ -314,7 +319,7 @@ class WorldEngine:
                 "request_investment", "acquire_energy", "generate_revenue",
                 "deposit", "withdraw", "take_loan", "repay_loan",
                 "create_company", "hire_worker", "set_interest_rate",
-                "inject_liquidity", "idle"
+                "inject_liquidity", "web_search", "idle"
             }
             action = decision.get("action", "idle")
             if action not in VALID_ACTIONS:
@@ -326,8 +331,10 @@ class WorldEngine:
             except (ValueError, TypeError):
                 amount = 1.0
 
+            search_query = str(decision.get("search_query", ""))[:200]
+
             try:
-                self._execute_agent_action(world, ledger, agent, company, action, reasoning, amount)
+                self._execute_agent_action(world, ledger, agent, company, action, reasoning, amount, search_query=search_query)
             except Exception as e:
                 logger.warning(f"Agent {agent.name} action failed: {e}")
                 if agent.company_id and company:
@@ -344,7 +351,7 @@ class WorldEngine:
             agent.influence_score = round(min(agent.total_value / 50, 100), 1)
             agent.risk_score = round(max(0, 50 - agent.wallet) / 50 * 100, 1) if agent.wallet < 50 else 0.0
 
-    def _execute_agent_action(self, world: World, ledger: EnergyLedger, agent, company, action: str, reasoning: str, amount: float) -> None:
+    def _execute_agent_action(self, world: World, ledger: EnergyLedger, agent, company, action: str, reasoning: str, amount: float, search_query: str = "") -> None:
         if action == "request_investment":
             loan_amount = min(amount, 500)
             if loan_amount > 0:
@@ -456,6 +463,42 @@ class WorldEngine:
                 world.log(f"[AI] {agent.name} injected {amount:.0f} liquidity into banking system ({reasoning})")
                 world.record_tx("liquidity_injection", agent.id, agent.name, "bank", "System Bank",
                                 amount, agent.currency)
+
+        elif action == "web_search":
+            energy_balance = ledger.balance_of(agent.id)
+            if energy_balance < SEARCH_ENERGY_COST:
+                world.log(f"[AI] {agent.name} wanted to search the web but lacks EnergyCore")
+                return
+            if not self.web_search.can_search(agent.id, world.tick_count):
+                world.log(f"[AI] {agent.name} search on cooldown, working instead")
+                return
+            if not search_query:
+                search_query = f"{agent.currency} economic outlook market trends"
+
+            try:
+                ledger.burn(agent.id, SEARCH_ENERGY_COST)
+                world.total_energy_burned += SEARCH_ENERGY_COST
+                agent.core_energy = ledger.balance_of(agent.id)
+            except Exception:
+                world.log(f"[AI] {agent.name} search failed: EnergyCore depleted")
+                return
+
+            result = self.web_search.search(agent.id, search_query, world.tick_count)
+            if result and result.results:
+                titles = [r.get("title", "")[:60] for r in result.results[:3]]
+                summary = " | ".join(t for t in titles if t)
+                world.log(f"[AI] {agent.name} searched the web: \"{search_query}\" → {summary}")
+                world.record_tx("web_search", agent.id, agent.name, "system", "Web/Internet",
+                                SEARCH_ENERGY_COST, "EC",
+                                {"query": search_query,
+                                 "result_count": len(result.results),
+                                 "top_results": [{"title": r.get("title", ""), "url": r.get("url", "")} for r in result.results[:3]],
+                                 "reasoning": reasoning})
+            else:
+                world.log(f"[AI] {agent.name} searched the web: \"{search_query}\" (no results)")
+                world.record_tx("web_search", agent.id, agent.name, "system", "Web/Internet",
+                                SEARCH_ENERGY_COST, "EC",
+                                {"query": search_query, "result_count": 0, "reasoning": reasoning})
 
         else:
             if agent.company_id and company:

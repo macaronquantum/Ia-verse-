@@ -20,7 +20,8 @@ An AI multi-agent economic system where Claude AI agents make real economic deci
   - GBC (British Credit) — Bank of England
   - CNC (China Network Credit) — People's Bank of China
 - **Banking**: Commercial banks lend capital, manage deposits, charge interest
-- **Agent Actions**: request_investment, acquire_energy, generate_revenue, deposit, withdraw, take_loan, create_company, hire_worker, set_interest_rate, inject_liquidity, idle
+- **Agent Actions**: request_investment, acquire_energy, generate_revenue, deposit, withdraw, take_loan, create_company, hire_worker, set_interest_rate, inject_liquidity, web_search, idle
+- **Web Search**: Agents can search the real web (DuckDuckGo) for market data, news, economic trends. Costs 0.5 EnergyCore per search, 2-tick cooldown. Results stored per agent and fed into future decision context.
 
 ## Project Structure
 - `app/main.py` — FastAPI app, REST endpoints, dashboard API, world bootstrap, auto-simulation loop
@@ -29,6 +30,7 @@ An AI multi-agent economic system where Claude AI agents make real economic deci
 - `app/models/__init__.py` — Core data models (World, Agent, Company, Bank, Loan) with EnergyCore fields, system currencies
 - `app/config.py` — Settings, EVOLUTION config, COSTS config
 - `app/energy/core.py` — EnergyLedger (mint/burn/transfer/charge), CoreEnergyLedger, GlobalEnergyCosts
+- `app/web_search.py` — WebSearchEngine using DuckDuckGo (ddgs), per-agent search history, cooldown, knowledge context
 - `app/agents/` — Personality system, genome/DNA, evolution, mutation, imitation, mind/cognition, beliefs
 - `app/llm/adapters.py` — HybridLLMAdapter with Claude API, ModelRouter, LLMCostEngine
 - `app/economy/` — Market system, economy coordinator, FX market
@@ -51,7 +53,7 @@ An AI multi-agent economic system where Claude AI agents make real economic deci
 
 ## Dashboard Features (5 Views)
 - **Map View**: Leaflet.js planisphere, agent markers with type-based colors and size proportional to value, live event feed
-- **Agent Explorer**: Search/filter/sort by type, currency, EnergyCore, influence. Tabbed agent profile (Overview with wealth chart, Transactions, Loans with terms, Actions/decision log). Fade animation on agent switch
+- **Agent Explorer**: Search/filter/sort by type, currency, EnergyCore, influence. Tabbed agent profile (Overview with wealth chart, Transactions, Loans with terms, Actions/decision log, Web Research). Fade animation on agent switch
 - **Wallets View**: Table of all agent wallets with currency balance, bank balance, EnergyCore, simulated public address and private key (click to reveal)
 - **Transactions View**: Chronological expandable transaction cards with type badges (color-coded), from/to agents, amounts. Click to expand for full details (loan terms, energy prices, etc.). Filter by type and agent
 - **Economy Dashboard**: Money supply, total EnergyCore, energy burned, Gini index, alive/dead agents, bank reserve, currencies, leaderboard
@@ -71,7 +73,7 @@ An AI multi-agent economic system where Claude AI agents make real economic deci
 - `GET /api/events/feed` — Live event feed
 
 ## Transaction Types
-deposit, withdraw, loan_issued, loan_repaid, acquire_energy, energy_burn, revenue, labor_income, dividend, company_create, investment, liquidity_injection, interest_rate_change
+deposit, withdraw, loan_issued, loan_repaid, acquire_energy, energy_burn, revenue, labor_income, dividend, company_create, investment, liquidity_injection, interest_rate_change, web_search
 
 ## Running
 ```

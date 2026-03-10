@@ -51,7 +51,7 @@ const TX_COLORS = {
   loan_repaid: '#16a34a', acquire_energy: '#0891b2', energy_burn: '#dc2626',
   revenue: '#16a34a', labor_income: '#64748b', dividend: '#ca8a04',
   company_create: '#6366f1', investment: '#2563eb', liquidity_injection: '#7c3aed',
-  interest_rate_change: '#dc2626'
+  interest_rate_change: '#dc2626', web_search: '#0ea5e9'
 };
 
 function initMap() {
@@ -286,6 +286,7 @@ function renderAgentProfile(a, tab = 'overview') {
       <button class="profile-tab ${tab === 'transactions' ? 'active' : ''}" data-tab="transactions" onclick="switchProfileTab('transactions')">Transactions</button>
       <button class="profile-tab ${tab === 'loans' ? 'active' : ''}" data-tab="loans" onclick="switchProfileTab('loans')">Loans</button>
       <button class="profile-tab ${tab === 'actions' ? 'active' : ''}" data-tab="actions" onclick="switchProfileTab('actions')">Actions</button>
+      <button class="profile-tab ${tab === 'research' ? 'active' : ''}" data-tab="research" onclick="switchProfileTab('research')">Web Research</button>
     </div>
     <div id="profile-content" class="profile-content"></div>
   `;
@@ -366,6 +367,30 @@ function renderProfileContent(a, tab) {
       }
       return `<div class="action-item"><div class="action-reason">${esc(l)}</div></div>`;
     }).reverse().join('')}</div>`;
+  } else if (tab === 'research') {
+    const searches = a.web_searches || [];
+    if (!searches.length) {
+      el.innerHTML = '<div class="empty-state">No web research yet. Agent will search the web when it needs real-world data to make decisions.</div>';
+      return;
+    }
+    el.innerHTML = `<div class="research-list">${searches.map(s => `
+      <div class="research-card">
+        <div class="research-header">
+          <span class="research-query">${esc(s.query)}</span>
+          <span class="action-tick">Tick ${s.tick}</span>
+        </div>
+        <div class="research-results">
+          ${(s.results || []).map(r => `
+            <div class="research-result">
+              <div class="research-title">${esc(r.title || 'Untitled')}</div>
+              <div class="research-body">${esc((r.body || '').substring(0, 200))}</div>
+              ${r.url ? `<a class="research-url" href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url.substring(0, 60))}...</a>` : ''}
+            </div>
+          `).join('')}
+        </div>
+        <div class="research-meta">${s.result_count} result${s.result_count !== 1 ? 's' : ''} found</div>
+      </div>
+    `).reverse().join('')}</div>`;
   }
 }
 
@@ -409,6 +434,14 @@ function renderTxCard(tx, compact = false) {
     detailsHtml = `
       <div class="tx-detail-row"><span>Old Rate</span><span>${((details.old_rate || 0) * 100).toFixed(1)}%</span></div>
       <div class="tx-detail-row"><span>New Rate</span><span>${((details.new_rate || 0) * 100).toFixed(1)}%</span></div>
+    `;
+  } else if (tx.type === 'web_search') {
+    const topResults = details.top_results || [];
+    detailsHtml = `
+      <div class="tx-detail-row"><span>Search Query</span><span>${esc(details.query || '')}</span></div>
+      <div class="tx-detail-row"><span>Results Found</span><span>${details.result_count || 0}</span></div>
+      ${topResults.map(r => `<div class="tx-detail-row"><span>Found</span><span><a href="${esc(r.url || '')}" target="_blank" rel="noopener">${esc((r.title || '').substring(0, 50))}</a></span></div>`).join('')}
+      ${details.reasoning ? `<div class="tx-detail-row"><span>Reason</span><span>${esc(details.reasoning)}</span></div>` : ''}
     `;
   }
 

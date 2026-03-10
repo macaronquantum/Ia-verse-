@@ -489,3 +489,59 @@ code.addr {
   .wallets-table { font-size: 0.7rem; }
   .wallets-table th, .wallets-table td { padding: 8px 10px; }
 }
+
+.research-list { display: flex; flex-direction: column; gap: 12px; }
+.research-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  backdrop-filter: blur(12px);
+}
+.research-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.research-query {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: #0ea5e9;
+}
+.research-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.research-result {
+  padding: 8px 10px;
+  background: rgba(14, 165, 233, 0.04);
+  border-radius: 6px;
+  border-left: 3px solid #0ea5e9;
+}
+.research-title {
+  font-weight: 500;
+  font-size: 0.82rem;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.research-body {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.research-url {
+  font-size: 0.72rem;
+  color: #0ea5e9;
+  text-decoration: none;
+  display: inline-block;
+  margin-top: 4px;
+}
+.research-url:hover { text-decoration: underline; }
+.research-meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-align: right;
+}

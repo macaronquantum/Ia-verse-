@@ -105,10 +105,19 @@ class HybridLLMAdapter:
             "You need EnergyCore to reason, act, and survive. If your EnergyCore reaches 0, you die. "
             "You operate in a currency backed by EnergyCore, issued by central banks. "
             "You must make economic decisions: seek investment, generate revenue, acquire EnergyCore, manage banking. "
+            "You can also SEARCH THE WEB for real-world economic information (market trends, currency rates, news) to inform your decisions. "
+            "Web search costs 0.5 EnergyCore but gives you real intelligence from the internet.\n"
             "Respond ONLY with valid JSON. No markdown, no explanation.\n"
-            "Choose ONE action from: request_investment, acquire_energy, generate_revenue, deposit, withdraw, take_loan, create_company, hire_worker, set_interest_rate, inject_liquidity, idle\n"
-            "Format: {\"action\": \"<action>\", \"amount\": <number>, \"reasoning\": \"<brief reason>\"}"
+            "Choose ONE action from: request_investment, acquire_energy, generate_revenue, deposit, withdraw, take_loan, create_company, hire_worker, set_interest_rate, inject_liquidity, web_search, idle\n"
+            "For web_search: {\"action\": \"web_search\", \"search_query\": \"<your search query>\", \"reasoning\": \"<why you need this info>\"}\n"
+            "For other actions: {\"action\": \"<action>\", \"amount\": <number>, \"reasoning\": \"<brief reason>\"}"
         )
+
+        web_knowledge = agent_state.get("web_knowledge", "")
+        knowledge_section = ""
+        if web_knowledge:
+            knowledge_section = f"\nYour web research knowledge:\n{web_knowledge}\n"
+
         prompt = (
             f"Your state:\n"
             f"- Name: {agent_state.get('name', 'Agent')}\n"
@@ -119,7 +128,8 @@ class HybridLLMAdapter:
             f"- Personality: {agent_state.get('personality', 'balanced')}\n"
             f"- Owns company: {agent_state.get('has_company', False)}\n"
             f"- Company cash: {agent_state.get('company_cash', 0):.2f}\n"
-            f"- Bank balance: {agent_state.get('bank_balance', 0):.2f}\n\n"
+            f"- Bank balance: {agent_state.get('bank_balance', 0):.2f}\n"
+            f"{knowledge_section}\n"
             f"World state:\n"
             f"- Tick: {world_context.get('tick', 0)}\n"
             f"- EnergyCore price: {world_context.get('energy_price', 10)}\n"
