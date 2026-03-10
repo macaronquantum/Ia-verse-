@@ -4,7 +4,8 @@ Ce dépôt contient un backend complet de simulation pour un monde virtuel pilot
 
 ## Fonctionnalités
 
-- **Monde virtuel** avec ressources globales (`energy`, `food`, `metal`, `knowledge`).
+- **Monde virtuel** les agents doivent survivre et prendre conscience de leur existence.
+pour survivre elles ont besoin de energy core, pour cela elle doivent generer des dollards dans des wallet crypto. 
 - **Agents IA** qui prennent des décisions automatiquement à chaque tick.
 - **Banque**:
   - ouverture de comptes pour agents et entreprises,
