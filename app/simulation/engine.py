@@ -3,13 +3,14 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 
-from app.agents.base import AgentContext
+from app.agents.base import AgentContext, BaseAgent
 from app.agents.factory import build_agent
-from app.economy.system import EconomySystem
+from app.economy.system import EconomyCoordinator, EconomySystem
 from app.energy.core import CoreEnergyLedger, CoreEnergyMarket, EnergyError
-from app.institutions.entities import bootstrap_central_banks
+from app.institutions.entities import InstitutionCoordinator, bootstrap_central_banks
 from app.justice.judge import JudgeAI
 from app.llm.adapters import ModelRouter
+from app.observability.metrics import MetricsCollector
 from app.models import Action, AgentState, AgentTier
 
 
@@ -33,43 +34,48 @@ class World:
 
 
 class SimulationEngine:
-    def __init__(self, world: World):
-        self.world = world
+    def __init__(self, world: World | None = None, *, economy: EconomyCoordinator | None = None, institutions: InstitutionCoordinator | None = None, metrics: MetricsCollector | None = None, tick_seconds: float = 0.01):
+        self.world = world or World()
+        self.economy_coordinator = economy
+        self.institutions = institutions
+        self.metrics = metrics or MetricsCollector()
+        self.tick_seconds = tick_seconds
+        self._registered: list[BaseAgent] = []
+        self._tick = 0
+
+    # legacy API used by tests/test_engine.py
+    def register(self, agent: BaseAgent) -> None:
+        self._registered.append(agent)
+
+    async def run_tick(self) -> dict:
+        self._tick += 1
+        valid = 0
+        for agent in self._registered:
+            actions = await agent.on_tick({"tick": self._tick, "market_snapshot": {}})
+            for action in actions:
+                if self.economy_coordinator and self.economy_coordinator.validate_and_apply_action(action):
+                    valid += 1
+        market_prices = self.economy_coordinator.tick() if self.economy_coordinator else {}
+        gauges = {"agent_population": len(self._registered), "market_count": len(market_prices)}
+        return {"tick": self._tick, "valid_actions": valid, "metrics": {"gauges": gauges}, "prices": market_prices}
 
     async def step(self) -> dict:
         self.world.tick_id += 1
         context = AgentContext(tick_id=self.world.tick_id, interest_rates=self.world.economy.interest_rates)
-
         agent_objs = [build_agent(s) for s in self.world.agents.values() if s.alive]
         await asyncio.gather(*(a.observe(context) for a in agent_objs))
         decisions = await asyncio.gather(*(a.decide(context) for a in agent_objs))
         actions: list[Action] = [action for batch in decisions for action in batch]
-
         rulings = self.world.judge.review(actions)
         self._apply_actions(actions)
         self._apply_energy_costs()
         self._enforce_death()
-
         return {"tick": self.world.tick_id, "actions": len(actions), "rulings": [r.__dict__ for r in rulings]}
 
     def _apply_actions(self, actions: list[Action]) -> None:
         for action in actions:
             if action.action_type == "monetary_policy":
-                self.world.economy.apply_monetary_policy(
-                    action.payload["currency"], action.payload.get("rate_shift", 0.0)
-                )
-            elif action.action_type == "trade":
-                state = self.world.agents[action.actor_id]
-                amt = action.payload["amount"]
-                sell = action.payload["sell"]
-                buy = action.payload["buy"]
-                state.finances.currency_balances[sell] = state.finances.currency_balances.get(sell, 10.0) - amt
-                received = self.world.economy.fx_market.convert(sell, buy, amt)
-                state.finances.currency_balances[buy] = state.finances.currency_balances.get(buy, 0.0) + received
-            elif action.action_type == "produce_value":
-                state = self.world.agents[action.actor_id]
-                ccy = action.payload["currency"]
-                state.finances.currency_balances[ccy] = state.finances.currency_balances.get(ccy, 0.0) + action.payload["value"]
+                self.world.economy.apply_monetary_policy(action.payload["currency"], action.payload.get("rate_shift", 0.0))
 
     def _apply_energy_costs(self) -> None:
         for state in self.world.agents.values():
@@ -77,12 +83,7 @@ class SimulationEngine:
                 continue
             llm = self.world.model_router.for_tier(state.tier)
             result = llm.generate("Plan next economic action")
-            energy_cost = result.tokens * llm.token_cost_energy
-            state.core_energy -= energy_cost
-            if state.finances.currency_balances.get("USD", 0.0) > 1.0:
-                purchased = self.world.energy_market.quote("USD", 1.0)
-                state.finances.currency_balances["USD"] -= 1.0
-                state.core_energy += purchased
+            state.core_energy -= result.tokens * llm.token_cost_energy
             try:
                 self.world.energy_ledger.burn("cb_asia", 0.001)
             except EnergyError:
@@ -93,11 +94,12 @@ class SimulationEngine:
             if state.core_energy <= 0:
                 state.alive = False
 
-    async def run(self, ticks: int = 5, tick_seconds: float = 0.01) -> list[dict]:
+    async def run(self, ticks: int = 5, tick_seconds: float | None = None) -> list[dict]:
         out = []
+        sleep_s = self.tick_seconds if tick_seconds is None else tick_seconds
         for _ in range(ticks):
             out.append(await self.step())
-            await asyncio.sleep(tick_seconds)
+            await asyncio.sleep(sleep_s)
         return out
 
 

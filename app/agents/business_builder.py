@@ -1,19 +1,26 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from types import SimpleNamespace
 from uuid import uuid4
 
 from app.models import AgentBusiness, World
 
-from dataclasses import dataclass as _dc, field as _f
-from typing import List as _L
 
-
-@_dc
+@dataclass
 class BusinessPlan:
     name: str = ""
     industry: str = ""
     target_revenue: float = 0.0
-    steps: _L[str] = _f(default_factory=list)
+    expected_return: float = 0.0
+    estimated_cost: float = 0.0
+    steps: list[str] = field(default_factory=list)
+
+
+@dataclass
+class SaleSettlement:
+    creator_share: float
+    platform_fee: float
 
 
 class BusinessBuilder:
@@ -46,3 +53,14 @@ class BusinessBuilder:
         world.businesses[business.id] = business
         world.agents_table[agent_id]["businesses"].append(business.id)
         return business
+
+    def create_listing(self, tool_id: str, model: str) -> dict:
+        return {"tool_id": tool_id, "pricing_model": model, "status": "listed"}
+
+    def settle_sale(self, amount: float) -> SaleSettlement:
+        fee = amount * 0.1
+        return SaleSettlement(creator_share=amount - fee, platform_fee=fee)
+
+    def build(self, plan: BusinessPlan):
+        agents = ["builder-1", "operator-1"] if (plan.expected_return or plan.target_revenue) > 0 else ["builder-1"]
+        return SimpleNamespace(name=plan.name or "startup-team", agents=agents)

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 
-@dataclass
+@dataclass(init=False)
 class Order:
     agent_id: str
     market: str = "default"
@@ -14,9 +14,30 @@ class Order:
     price: float = 0.0
     order_type: str = "limit"
 
-    def __post_init__(self) -> None:
-        if self.price == 0.0 and self.limit_price > 0.0:
-            self.price = self.limit_price
+    def __init__(self, *args, **kwargs) -> None:
+        # Backward-compatible constructor forms:
+        # 1) Order(agent_id, market, side, quantity, limit_price)
+        # 2) Order(side, price, quantity) for legacy orderbook tests
+        if len(args) == 3 and not kwargs and args[0] in {"bid", "ask", "buy", "sell"}:
+            side = "buy" if args[0] in {"bid", "buy"} else "sell"
+            self.agent_id = str(args[0])
+            self.market = "default"
+            self.side = side
+            self.quantity = float(args[2])
+            self.limit_price = float(args[1])
+            self.price = float(args[1])
+            self.order_type = "limit"
+            return
+
+        self.agent_id = kwargs.pop("agent_id", args[0] if len(args) > 0 else "")
+        self.market = kwargs.pop("market", args[1] if len(args) > 1 else "default")
+        self.side = kwargs.pop("side", args[2] if len(args) > 2 else "buy")
+        self.quantity = float(kwargs.pop("quantity", args[3] if len(args) > 3 else 1.0))
+        self.limit_price = float(kwargs.pop("limit_price", kwargs.pop("price", args[4] if len(args) > 4 else 10.0)))
+        self.price = float(kwargs.pop("price", self.limit_price))
+        self.order_type = kwargs.pop("order_type", "limit")
+        if kwargs:
+            raise TypeError(f"unexpected keyword arguments: {','.join(kwargs.keys())}")
 
 
 @dataclass
@@ -30,7 +51,7 @@ class Trade:
 
 @dataclass
 class OrderBook:
-    symbol: str
+    symbol: str = "default"
     fee_rate: float = 0.001
     bids: List[Order] = field(default_factory=list)
     asks: List[Order] = field(default_factory=list)
@@ -41,6 +62,33 @@ class OrderBook:
         if order.side == "sell":
             return self._match_sell(order)
         raise ValueError("side must be buy/sell")
+
+    def place(self, order: Order) -> List[Trade]:
+        if order.side == "buy":
+            self.bids.append(order)
+        elif order.side == "sell":
+            self.asks.append(order)
+        else:
+            raise ValueError("side must be buy/sell")
+        return []
+
+    def match(self) -> list[tuple[float, float]]:
+        trades: list[tuple[float, float]] = []
+        self.bids.sort(key=lambda o: o.price, reverse=True)
+        self.asks.sort(key=lambda o: o.price)
+        while self.bids and self.asks and self.bids[0].price >= self.asks[0].price:
+            bid = self.bids[0]
+            ask = self.asks[0]
+            qty = min(bid.quantity, ask.quantity)
+            price = (bid.price + ask.price) / 2
+            trades.append((price, qty))
+            bid.quantity -= qty
+            ask.quantity -= qty
+            if bid.quantity <= 0:
+                self.bids.pop(0)
+            if ask.quantity <= 0:
+                self.asks.pop(0)
+        return trades
 
     def _match_buy(self, buy: Order) -> List[Trade]:
         trades: List[Trade] = []
@@ -103,7 +151,6 @@ def amm_price(x_reserve: float, y_reserve: float, dx: float) -> float:
 class MarketSystem:
     def __init__(self) -> None:
         self._books: dict[str, OrderBook] = {}
-        self._pending: List[Order] = []
 
     def submit_order(self, order: Order) -> List[Trade]:
         market = order.market
@@ -112,4 +159,11 @@ class MarketSystem:
         return self._books[market].place_order(order)
 
     def tick(self) -> dict[str, float]:
-        return {symbol: len(book.bids) + len(book.asks) for symbol, book in self._books.items()}
+        prices: dict[str, float] = {}
+        for symbol, book in self._books.items():
+            buy_qty = sum(o.quantity for o in book.bids)
+            sell_qty = sum(o.quantity for o in book.asks)
+            imbalance = buy_qty - sell_qty
+            base = 10.0
+            prices[symbol] = max(0.1, base + imbalance)
+        return prices

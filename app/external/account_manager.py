@@ -37,7 +37,7 @@ class AccountManager:
         self._check_policy(session.site)
         session.logged_in = True
         session.audit.append(f"action:{action_spec.get('type','unknown')}")
-        return {"ok": True, "dev_mode": settings.dev_mode}
+        return {"ok": True, "dev_mode": bool(getattr(settings, 'dev_mode', getattr(settings, 'DEV_ALLOW_MINT', False)))}
 
     def post_content(self, session: AccountSession, content: Dict) -> Dict:
         if not session.logged_in:

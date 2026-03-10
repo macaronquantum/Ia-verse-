@@ -52,6 +52,7 @@ class BillingLedger:
         self.balances: dict[str, float] = {}
         self.reserved: dict[str, float] = {}
         self.entries: list[LedgerEntry] = []
+        self._holds: dict[str, str] = {}
 
     def credit(self, owner_id: str, amount: float) -> None:
         self.balances[owner_id] = self.balances.get(owner_id, 0.0) + amount
@@ -61,20 +62,24 @@ class BillingLedger:
             raise ValueError("insufficient balance")
         self.balances[owner_id] -= amount
         self.reserved[owner_id] = self.reserved.get(owner_id, 0.0) + amount
-        return self._append(owner_id, "preauth", amount, "reserved")
+        hold_id = self._append(owner_id, "preauth", amount, "reserved")
+        self._holds[hold_id] = owner_id
+        return hold_id
 
     def capture(self, owner_id: str, amount: float) -> str:
-        if self.reserved.get(owner_id, 0.0) < amount:
+        owner = self._holds.get(owner_id, owner_id)
+        if self.reserved.get(owner, 0.0) < amount:
             raise ValueError("insufficient reserved")
-        self.reserved[owner_id] -= amount
-        return self._append(owner_id, "capture", amount, "ok")
+        self.reserved[owner] -= amount
+        return self._append(owner, "capture", amount, "ok")
 
     def refund(self, owner_id: str, amount: float) -> str:
-        if self.reserved.get(owner_id, 0.0) < amount:
+        owner = self._holds.get(owner_id, owner_id)
+        if self.reserved.get(owner, 0.0) < amount:
             raise ValueError("insufficient reserved")
-        self.reserved[owner_id] -= amount
-        self.balances[owner_id] = self.balances.get(owner_id, 0.0) + amount
-        return self._append(owner_id, "refund", amount, "ok")
+        self.reserved[owner] -= amount
+        self.balances[owner] = self.balances.get(owner, 0.0) + amount
+        return self._append(owner, "refund", amount, "ok")
 
     def _append(self, owner_id: str, kind: str, amount: float, status: str) -> str:
         prev = self.entries[-1].hash if self.entries else "GENESIS"

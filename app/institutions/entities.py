@@ -51,7 +51,14 @@ def bootstrap_central_banks() -> list[CentralBankRecord]:
     return [
         CentralBankRecord(bank_id="cb_asia", core_energy_reserve=500.0),
         CentralBankRecord(bank_id="cb_europe", core_energy_reserve=500.0),
+        CentralBankRecord(bank_id="cb_americas", core_energy_reserve=500.0),
+        CentralBankRecord(bank_id="cb_africa", core_energy_reserve=500.0),
+        CentralBankRecord(bank_id="cb_oceania", core_energy_reserve=500.0),
     ]
 
 
-InstitutionBootstrap = InstitutionCoordinator
+class InstitutionBootstrap:
+    def create_initial_central_banks(self) -> list[CentralBankRecord]:
+        return bootstrap_central_banks()
+
+

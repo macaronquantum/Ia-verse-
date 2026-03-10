@@ -71,6 +71,14 @@ class Settings:
     GROQ_API_KEY: str = field(default_factory=lambda: os.getenv("GROQ_API_KEY", ""))
     WALLET_KEY: str = field(default_factory=lambda: os.getenv("WALLET_ENCRYPTION_KEY", "dev-only-32-byte-key-change-me!!!!"))
 
+    @property
+    def dev_mode(self) -> bool:
+        return self.DEV_ALLOW_MINT
+
+    @property
+    def llm_budget_per_tick(self) -> float:
+        return _env_float("LLM_BUDGET_PER_TICK", 1.0)
+
 
 @dataclass
 class EvolutionConfig:

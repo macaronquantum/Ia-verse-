@@ -12,6 +12,14 @@ from app.config import COSTS, EVOLUTION
 from app.memory.store import STORE
 
 
+ROLE_ALIASES = {
+    "dev": "worker",
+    "citizen": "worker",
+    "engineering": "worker",
+    "operations": "worker",
+}
+
+
 @dataclass
 class WorkerAgent:
     id: str
@@ -27,8 +35,11 @@ class AgentFactory:
         self.workers: dict[str, WorkerAgent] = {}
         self.seed = seed
 
+    def _cost_for_role(self, role: str) -> float:
+        return COSTS.create_agent_costs.get(role, COSTS.create_agent_costs.get(ROLE_ALIASES.get(role, "worker"), 1.0))
+
     def create_sub_agent(self, creator_budget: float, role: str, template_skills: list[str]) -> tuple[WorkerAgent, float]:
-        cost = COSTS.create_agent_costs[role]
+        cost = self._cost_for_role(role)
         if creator_budget < cost:
             raise ValueError("insufficient CoreEnergy")
         genome = genome_lib.random_genome(seed=self.seed)
@@ -36,7 +47,7 @@ class AgentFactory:
         worker = WorkerAgent(
             id=str(uuid4()),
             role=role,
-            salary=cost * 0.2,
+            salary=cost,
             skills=template_skills[:],
             core_energy=100.0,
             personality=personality,
@@ -64,7 +75,7 @@ class AgentFactory:
         worker = WorkerAgent(
             id=spec.agent_id,
             role=role,
-            salary=COSTS.create_agent_costs.get(role, 1.0) * 0.2,
+            salary=self._cost_for_role(role),
             skills=template_skills[:],
             core_energy=50.0,
             personality=spec.personality,
@@ -72,19 +83,30 @@ class AgentFactory:
         self.workers[worker.id] = worker
         return worker
 
+    def spawn(self, team: "CompanyTeam", role: str, salary: float) -> WorkerAgent:
+        worker = WorkerAgent(id=str(uuid4()), role=role, salary=salary, skills=team.parent_skills[:])
+        team.members.append(worker)
+        return worker
+
+    def pay_salaries(self, team: "CompanyTeam") -> float:
+        due = team.payroll()
+        team.treasury -= due
+        return due
+
     def fire(self, worker_id: str) -> None:
         self.workers.pop(worker_id, None)
 
 
-from dataclasses import field as _field
-
-from app.agents.personality import Personality as _Personality
-
-
 class CompanyTeam:
-    def __init__(self, company_name: str) -> None:
-        self.company_name = company_name
+    def __init__(self, company_name: str | None = None, treasury: float = 0.0, parent_skills: list[str] | None = None) -> None:
+        self.company_name = company_name or "company"
+        self.treasury = treasury
+        self.parent_skills = parent_skills or []
         self.members: list[WorkerAgent] = []
+
+    @property
+    def agents(self) -> list[WorkerAgent]:
+        return self.members
 
     def add(self, worker: WorkerAgent) -> None:
         self.members.append(worker)

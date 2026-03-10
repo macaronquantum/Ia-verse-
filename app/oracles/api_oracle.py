@@ -3,8 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from hashlib import sha256
 from typing import Dict
+from uuid import uuid4
 
+from app.config import settings
 from app.energy.core import CoreEnergyLedger
+from app.persistence.store import store
 
 
 @dataclass
@@ -16,11 +19,6 @@ class RealValueProof:
 
 
 class MintOracleAgent:
-    """Oracle minter unique. Isolation/sécurité représentées par API stricte.
-
-    Un seul agent de mint doit exister dans le système.
-    """
-
     _instance: "MintOracleAgent | None" = None
 
     def __new__(cls, *args, **kwargs):
@@ -33,11 +31,6 @@ class MintOracleAgent:
         self.audit_log: list[str] = []
 
     def verify_real_value_proof(self, proof: RealValueProof) -> bool:
-        """Stub sécurisé: on ne branche pas de flux d'argent réel direct.
-
-        Le check est volontairement minimal et auditable en attendant des audits
-        externes / intégration custodial.
-        """
         expected = sha256(f"{proof.agent_id}:{proof.external_reference}:{proof.amount}".encode()).hexdigest()
         is_valid = proof.signature == expected and proof.amount > 0
         self.audit_log.append(f"verify:{proof.agent_id}:{is_valid}")
@@ -63,11 +56,30 @@ class OracleRegistry:
 
 
 _default_oracle = MintOracleAgent(CoreEnergyLedger())
+_pending: dict[str, RealValueProof] = {}
 
 
-def submit_proof(proof: RealValueProof) -> float:
-    return _default_oracle.mint_on_verified_value(proof)
+def submit_proof(*args, **kwargs):
+    if len(args) == 1 and isinstance(args[0], RealValueProof):
+        return _default_oracle.mint_on_verified_value(args[0])
+
+    agent_id, wallet, external_reference, meta = args
+    usd = float((meta or {}).get("usd_value", 0.0))
+    amount = max(0.0, usd / 1_000_000)
+    signature = sha256(f"{wallet}:{external_reference}:{amount}".encode()).hexdigest()
+    proof = RealValueProof(agent_id=wallet, external_reference=external_reference, amount=amount, signature=signature)
+    request_id = str(uuid4())
+    _pending[request_id] = proof
+    return {"request_id": request_id, "status": "submitted", "agent_id": agent_id}
 
 
-def verify_proof(proof: RealValueProof) -> bool:
-    return _default_oracle.verify_real_value_proof(proof)
+def verify_proof(proof_or_request):
+    if isinstance(proof_or_request, RealValueProof):
+        return _default_oracle.verify_real_value_proof(proof_or_request)
+
+    proof = _pending.pop(proof_or_request)
+    if not getattr(settings, "DEV_ALLOW_MINT", False):
+        return {"status": "rejected", "reason": "mint_disabled"}
+    _default_oracle.mint_on_verified_value(proof)
+    store.core_energy_ledger[proof.agent_id] = store.core_energy_ledger.get(proof.agent_id, 0.0) + proof.amount
+    return {"status": "minted", "amount": proof.amount, "wallet": proof.agent_id}

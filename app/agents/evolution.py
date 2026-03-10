@@ -51,7 +51,8 @@ def spawn_child(
             child_genome = genome_lib.crossover(parent_genomes[0], parent_genomes[1], method=method)
             if EVOLUTION.child_inheritance == "average":
                 for key in ["obedience", "greed", "risk", "cooperation", "curiosity", "manipulativeness"]:
-                    child_genome[key] = (float(parent_genomes[0][key]) + float(parent_genomes[1][key])) / 2
+                    base = (float(parent_genomes[0][key]) + float(parent_genomes[1][key])) / 2
+                    child_genome[key] = max(0.0, min(1.0, base + random.gauss(0.0, 1e-4)))
         child_genome = genome_lib.mutate(
             child_genome,
             mutation_rate=mutation_rate if mutation_rate is not None else EVOLUTION.default_mutation_rate,
