@@ -4,7 +4,11 @@ from dataclasses import asdict
 from typing import Dict
 from uuid import uuid4
 
+import logging
+
 from app.models import Agent, Company, Resource, World
+
+logger = logging.getLogger(__name__)
 
 
 class AutonomousScheduler:
@@ -36,6 +40,14 @@ class WorldEngine:
     def __init__(self) -> None:
         self.worlds: Dict[str, World] = {}
         self.scheduler = AutonomousScheduler()
+        self._llm = None
+
+    @property
+    def llm(self):
+        if self._llm is None:
+            from app.llm.adapters import HybridLLMAdapter
+            self._llm = HybridLLMAdapter(provider="anthropic", model="claude-haiku-4-5")
+        return self._llm
 
     def create_world(self, name: str) -> World:
         world = World(id=str(uuid4()), name=name)
@@ -170,26 +182,126 @@ class WorldEngine:
         raise ValueError("owner not found")
 
     def _run_agent_ai(self, world: World) -> None:
+        prices = {k.value: v for k, v in world.market_prices.items()}
+        resources = {k.value: round(v, 1) for k, v in world.global_resources.items()}
+        world_context = {
+            "tick": world.tick_count,
+            "prices": prices,
+            "resources": resources,
+            "agent_count": len(world.agents),
+            "company_count": len(world.companies),
+        }
+
         for agent in world.agents.values():
-            if not agent.company_id and agent.wallet >= 120:
+            company = world.companies.get(agent.company_id) if agent.company_id else None
+            bank_balance = 0.0
+            acct = world.bank.accounts.get(agent.id)
+            if acct:
+                bank_balance = acct.balance
+
+            agent_state = {
+                "name": agent.name,
+                "wallet": agent.wallet,
+                "inventory": {k.value: v for k, v in agent.inventory.items()},
+                "has_company": agent.company_id is not None,
+                "company_cash": company.cash if company else 0,
+                "bank_balance": bank_balance,
+            }
+
+            try:
+                decision = self.llm.decide_action(agent_state, world_context)
+            except Exception:
+                decision = {"action": "idle", "reasoning": "error"}
+
+            VALID_ACTIONS = {"buy_resource", "sell_resource", "invest_company", "take_loan", "deposit_savings", "hire_worker", "idle"}
+            action = decision.get("action", "idle")
+            if action not in VALID_ACTIONS:
+                action = "idle"
+            reasoning = str(decision.get("reasoning", ""))[:200]
+
+            try:
+                amount = max(0.0, min(float(decision.get("amount", 1)), 100))
+            except (ValueError, TypeError):
+                amount = 1.0
+
+            resource_name = decision.get("resource", "energy")
+            valid_resources = {r.value for r in Resource}
+            try:
+                resource_key = Resource(resource_name) if resource_name in valid_resources else Resource.ENERGY
+            except (ValueError, KeyError):
+                resource_key = Resource.ENERGY
+
+            try:
+                self._execute_agent_action(world, agent, company, action, reasoning, amount, resource_key, prices)
+            except Exception as e:
+                logger.warning(f"Agent {agent.name} action failed: {e}")
+                if agent.company_id and company:
+                    company.cash += 10
+                    world.log(f"{agent.name} worked for {company.name} (+10 cash) [fallback]")
+
+    def _execute_agent_action(self, world: World, agent, company, action: str, reasoning: str, amount: float, resource_key, prices: dict) -> None:
+        if action == "buy_resource" and agent.wallet >= amount * prices.get(resource_key.value, 5):
+            cost = amount * world.market_prices[resource_key]
+            if agent.wallet >= cost and world.global_resources[resource_key] >= amount:
+                agent.wallet -= cost
+                agent.inventory[resource_key] = agent.inventory.get(resource_key, 0) + amount
+                world.global_resources[resource_key] -= amount
+                world.log(f"[AI] {agent.name} bought {amount:.1f} {resource_key.value} for ${cost:.2f} ({reasoning})")
+
+        elif action == "sell_resource":
+            available = agent.inventory.get(resource_key, 0)
+            sell_qty = min(amount, available)
+            if sell_qty > 0:
+                revenue = sell_qty * world.market_prices[resource_key]
+                agent.inventory[resource_key] -= sell_qty
+                agent.wallet += revenue
+                world.global_resources[resource_key] += sell_qty
+                world.log(f"[AI] {agent.name} sold {sell_qty:.1f} {resource_key.value} for ${revenue:.2f} ({reasoning})")
+
+        elif action == "invest_company":
+            if not agent.company_id and agent.wallet >= 100:
+                self.create_company(world.id, agent.id, f"{agent.name}-Co")
+                invest = min(80, agent.wallet * 0.5)
+                agent.wallet -= invest
+                world.companies[agent.company_id].cash += invest
+                world.log(f"[AI] {agent.name} founded a company with ${invest:.2f} ({reasoning})")
+            elif company and agent.wallet >= 50:
+                invest = min(amount, agent.wallet * 0.3)
+                agent.wallet -= invest
+                company.cash += invest
+                world.log(f"[AI] {agent.name} invested ${invest:.2f} in {company.name} ({reasoning})")
+
+        elif action == "take_loan":
+            loan_amount = min(amount, 500)
+            if loan_amount > 0:
+                try:
+                    self.request_loan(world.id, agent.id, loan_amount)
+                    world.log(f"[AI] {agent.name} took ${loan_amount:.2f} loan ({reasoning})")
+                except ValueError:
+                    world.log(f"[AI] {agent.name} loan rejected ({reasoning})")
+
+        elif action == "deposit_savings":
+            deposit_amt = min(amount, agent.wallet * 0.5)
+            if deposit_amt > 0:
+                try:
+                    self.transfer_wallet_to_bank(world.id, agent.id, deposit_amt)
+                    world.log(f"[AI] {agent.name} deposited ${deposit_amt:.2f} ({reasoning})")
+                except ValueError:
+                    pass
+
+        elif action == "hire_worker" and company:
+            company.cash += 10
+            world.log(f"[AI] {agent.name} worked in {company.name} (+10 cash) ({reasoning})")
+
+        else:
+            if agent.company_id and company:
+                company.cash += 10
+                world.log(f"{agent.name} worked for {company.name} (+10 cash)")
+            elif not agent.company_id and agent.wallet >= 120:
                 self.create_company(world.id, agent.id, f"{agent.name}-industries")
                 agent.wallet -= 80
-                company = world.companies[agent.company_id]
-                company.cash += 80
-                world.log(f"Agent '{agent.name}' invested 80 into new company")
-                continue
-
-            if agent.company_id:
-                company = world.companies[agent.company_id]
-                company.cash += 10
-                world.log(f"Agent '{agent.name}' worked for company '{company.name}' (+10 cash)")
-
-                if company.cash < 25:
-                    try:
-                        loan_id = self.request_loan(world.id, company.id, 100)
-                        world.log(f"Company '{company.name}' took emergency loan {loan_id}")
-                    except ValueError:
-                        world.log(f"Company '{company.name}' failed to get emergency loan")
+                world.companies[agent.company_id].cash += 80
+                world.log(f"{agent.name} invested 80 into new company")
 
     def _run_economy(self, world: World) -> None:
         for company in world.companies.values():

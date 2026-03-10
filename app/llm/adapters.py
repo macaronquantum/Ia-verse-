@@ -1,12 +1,34 @@
 from __future__ import annotations
 
+import json
+import os
+import logging
 from dataclasses import dataclass
 
 from app.energy.core import GLOBAL_ENERGY_COSTS
 
+logger = logging.getLogger(__name__)
 
 LOCAL_PROVIDERS = {"ollama", "vllm", "local"}
 EXTERNAL_PROVIDERS = {"openai", "anthropic", "google"}
+
+AI_INTEGRATIONS_ANTHROPIC_API_KEY = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_API_KEY")
+AI_INTEGRATIONS_ANTHROPIC_BASE_URL = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_BASE_URL")
+
+_anthropic_client = None
+
+def get_anthropic_client():
+    global _anthropic_client
+    if _anthropic_client is None and AI_INTEGRATIONS_ANTHROPIC_API_KEY and AI_INTEGRATIONS_ANTHROPIC_BASE_URL:
+        try:
+            from anthropic import Anthropic
+            _anthropic_client = Anthropic(
+                api_key=AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+                base_url=AI_INTEGRATIONS_ANTHROPIC_BASE_URL
+            )
+        except Exception as e:
+            logger.warning(f"Failed to init Anthropic client: {e}")
+    return _anthropic_client
 
 
 @dataclass
@@ -37,7 +59,7 @@ class LLMCostEngine:
     def choose_provider(self, prefer_local: bool = True, local_available: bool = True) -> str:
         if prefer_local and local_available:
             return "ollama"
-        return "openai"
+        return "anthropic"
 
 
 @dataclass
@@ -47,18 +69,76 @@ class LLMResult:
 
 
 class HybridLLMAdapter:
-    def __init__(self, provider: str = "local", model: str = "default") -> None:
+    def __init__(self, provider: str = "anthropic", model: str = "claude-haiku-4-5") -> None:
         self.provider = provider
         self.model = model
         self.token_cost_energy = GLOBAL_ENERGY_COSTS.local_reasoning_tick
 
-    def generate(self, prompt: str) -> LLMResult:
+    def _call_claude(self, system: str, prompt: str, max_tokens: int = 1024) -> str | None:
+        client = get_anthropic_client()
+        if client is None:
+            return None
+        try:
+            message = client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                system=system,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return message.content[0].text
+        except Exception as e:
+            logger.warning(f"Claude API call failed: {e}")
+            return None
+
+    def generate(self, prompt: str, system: str = "") -> LLMResult:
+        if not system:
+            system = "You are an AI agent in an economic simulation. Respond concisely."
+        text = self._call_claude(system, prompt, max_tokens=512)
+        if text:
+            return LLMResult(text=text, tokens=len(text) // 4)
         return LLMResult(text=f"[simulated response to: {prompt[:50]}]", tokens=100)
+
+    def decide_action(self, agent_state: dict, world_context: dict) -> dict:
+        system = (
+            "You are an autonomous AI agent in an economic simulation called IA-Verse. "
+            "You must decide your next action. You have a wallet, inventory, and can own a company. "
+            "Respond ONLY with valid JSON. No markdown, no explanation.\n"
+            "Choose ONE action from: buy_resource, sell_resource, invest_company, take_loan, deposit_savings, hire_worker, idle\n"
+            "Format: {\"action\": \"<action>\", \"resource\": \"<energy|food|metal|knowledge>\", \"amount\": <number>, \"reasoning\": \"<brief reason>\"}"
+        )
+        prompt = (
+            f"Your state:\n"
+            f"- Name: {agent_state.get('name', 'Agent')}\n"
+            f"- Wallet: ${agent_state.get('wallet', 0):.2f}\n"
+            f"- Inventory: {json.dumps(agent_state.get('inventory', {}))}\n"
+            f"- Owns company: {agent_state.get('has_company', False)}\n"
+            f"- Company cash: ${agent_state.get('company_cash', 0):.2f}\n"
+            f"- Bank balance: ${agent_state.get('bank_balance', 0):.2f}\n\n"
+            f"World state:\n"
+            f"- Tick: {world_context.get('tick', 0)}\n"
+            f"- Market prices: {json.dumps(world_context.get('prices', {}))}\n"
+            f"- Available resources: {json.dumps(world_context.get('resources', {}))}\n"
+            f"- Total agents: {world_context.get('agent_count', 0)}\n"
+            f"- Total companies: {world_context.get('company_count', 0)}\n\n"
+            f"What is your next action? Respond with JSON only."
+        )
+        text = self._call_claude(system, prompt, max_tokens=256)
+        if text:
+            try:
+                cleaned = text.strip()
+                if cleaned.startswith("```"):
+                    cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+                return json.loads(cleaned)
+            except (json.JSONDecodeError, IndexError):
+                logger.warning(f"Failed to parse AI decision: {text[:200]}")
+        return {"action": "idle", "reasoning": "fallback - no AI response"}
 
     async def complete(self, prompt: str, depth: float = 1.0) -> tuple[str, bool]:
         use_external = depth > 0.5 and self.provider not in LOCAL_PROVIDERS
-        text = f"[simulated: {prompt[:50]}]"
-        return text, use_external
+        text = self._call_claude("You are a helpful AI assistant.", prompt, max_tokens=512)
+        if text:
+            return text, use_external
+        return f"[simulated: {prompt[:50]}]", use_external
 
 
 class ModelRouter:
@@ -67,5 +147,8 @@ class ModelRouter:
 
     def for_tier(self, tier: str) -> HybridLLMAdapter:
         if tier not in self._adapters:
-            self._adapters[tier] = HybridLLMAdapter(provider="local", model=f"{tier}_model")
+            model = "claude-haiku-4-5"
+            if tier in ("premium", "high"):
+                model = "claude-sonnet-4-6"
+            self._adapters[tier] = HybridLLMAdapter(provider="anthropic", model=model)
         return self._adapters[tier]

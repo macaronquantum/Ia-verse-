@@ -4,8 +4,9 @@
 A FastAPI-based virtual world simulation backend (economic game) with a dashboard frontend. AI agents make decisions each tick, with companies, banks, loans, and markets. All 14 GitHub branches have been merged into a unified codebase.
 
 ## Architecture
-- **Language**: Python 3.12
+- **Language**: Python 3.11
 - **Framework**: FastAPI + Uvicorn
+- **AI Model**: Claude (via Replit AI Integrations — Anthropic) using `claude-haiku-4-5` for agent decisions
 - **Frontend**: HTML/JS dashboard at `web/dashboard/`
 - **No database**: All state is in-memory via the `WorldEngine`
 - **Port**: 5000
@@ -30,7 +31,7 @@ A FastAPI-based virtual world simulation backend (economic game) with a dashboar
 - `app/observability/` — Metrics (Metrics, MetricsStore, MetricsCollector)
 - `app/integrations/` — Alchemy client, Solana gateway, human marketplace
 - `app/culture/` — Belief engine, movements, social influence
-- `app/llm/` — LLM adapters (HybridLLMAdapter, ModelRouter, LLMCostEngine)
+- `app/llm/` — LLM adapters (HybridLLMAdapter with real Claude API, ModelRouter, LLMCostEngine)
 - `app/world/` — World state and crisis engine
 - `app/social/` — Social network and messaging
 - `app/humans/` — Human task dispatcher
@@ -52,6 +53,7 @@ A FastAPI-based virtual world simulation backend (economic game) with a dashboar
 - Energy system: minting, burning, reserves, transfers
 - Justice system: action review, freeze, fine, ban agents
 - Autonomous scheduler: background cycles, goals, tasks, memory, metrics
+- AI-powered agent decisions: each agent calls Claude to decide buy/sell/invest/loan actions each tick
 
 ## Running Locally
 ```
