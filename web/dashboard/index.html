@@ -49,7 +49,7 @@
                 <div class="glass-card stats-row">
                     <div class="stat-mini"><span class="stat-n" id="s-agents">0</span><span class="stat-l">agents</span></div>
                     <div class="stat-mini"><span class="stat-n" id="s-companies">0</span><span class="stat-l">companies</span></div>
-                    <div class="stat-mini"><span class="stat-n" id="s-money">$0</span><span class="stat-l">supply</span></div>
+                    <div class="stat-mini"><span class="stat-n" id="s-energy">0</span><span class="stat-l">energy</span></div>
                 </div>
             </div>
             <div class="map-overlay-right">
@@ -77,11 +77,13 @@
                             <option value="company">Companies</option>
                             <option value="state">States</option>
                             <option value="judge">Judges</option>
-                            <option value="energy_provider">Energy</option>
+                            <option value="energy_provider">EnergyCore</option>
                             <option value="citizen">Citizens</option>
                         </select>
                         <select id="agent-sort" class="select" onchange="filterAgents()">
-                            <option value="wallet">Wealth</option>
+                            <option value="total_value">Total Value</option>
+                            <option value="wallet">Currency</option>
+                            <option value="core_energy">EnergyCore</option>
                             <option value="influence">Influence</option>
                             <option value="name">Name</option>
                         </select>
@@ -99,17 +101,19 @@
         <div id="view-economy" class="view">
             <div class="economy-page">
                 <div class="metrics-row">
-                    <div class="glass-card metric"><span class="metric-label">Money Supply</span><span class="metric-value" id="e-money">$0</span></div>
-                    <div class="glass-card metric"><span class="metric-label">Agents</span><span class="metric-value" id="e-agents">0</span></div>
+                    <div class="glass-card metric"><span class="metric-label">Money Supply</span><span class="metric-value" id="e-money">0</span></div>
+                    <div class="glass-card metric"><span class="metric-label">Total EnergyCore</span><span class="metric-value" id="e-energy">0</span></div>
+                    <div class="glass-card metric"><span class="metric-label">Energy Burned</span><span class="metric-value red" id="e-burned">0</span></div>
+                    <div class="glass-card metric"><span class="metric-label">Agents Alive</span><span class="metric-value" id="e-agents">0</span></div>
                     <div class="glass-card metric"><span class="metric-label">Companies</span><span class="metric-value" id="e-companies">0</span></div>
                     <div class="glass-card metric"><span class="metric-label">Gini Index</span><span class="metric-value" id="e-gini">0.00</span><div class="gini-bar"><div class="gini-fill" id="gini-fill"></div></div></div>
-                    <div class="glass-card metric"><span class="metric-label">Bankrupt</span><span class="metric-value red" id="e-bankrupt">0</span></div>
-                    <div class="glass-card metric"><span class="metric-label">Bank Reserve</span><span class="metric-value" id="e-reserve">$0</span></div>
+                    <div class="glass-card metric"><span class="metric-label">Dead Agents</span><span class="metric-value red" id="e-dead">0</span></div>
+                    <div class="glass-card metric"><span class="metric-label">Bank Reserve</span><span class="metric-value" id="e-reserve">0</span></div>
                 </div>
                 <div class="panels-row">
                     <div class="glass-card">
-                        <h3 class="card-title">Market Prices</h3>
-                        <div id="prices-grid" class="prices-grid"></div>
+                        <h3 class="card-title">EnergyCore Economics</h3>
+                        <div id="energy-stats" class="energy-stats"></div>
                     </div>
                     <div class="glass-card">
                         <h3 class="card-title">Leaderboard</h3>
@@ -117,8 +121,8 @@
                     </div>
                 </div>
                 <div class="glass-card">
-                    <h3 class="card-title">Global Resources</h3>
-                    <div id="resources-bars"></div>
+                    <h3 class="card-title">System Currencies</h3>
+                    <div id="currencies-grid" class="prices-grid"></div>
                 </div>
             </div>
         </div>

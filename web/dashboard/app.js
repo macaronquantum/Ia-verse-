@@ -55,27 +55,27 @@ function initMap() {
   }).addTo(map);
 
   L.control.zoom({ position: 'topright' }).addTo(map);
+
+  map.on('click', () => {
+    document.getElementById('agent-popup').classList.add('hidden');
+  });
 }
 
 function updateMapAgents(agents) {
-  if (!map) return;
   agentMarkers.forEach(m => map.removeLayer(m));
   agentMarkers = [];
+  if (!agents || !agents.length) return;
 
   agents.forEach(a => {
+    if (!a.lat && !a.lng) return;
     const color = TYPE_COLORS[a.type] || '#64748b';
-    const size = Math.max(6, Math.min(20, Math.sqrt(a.wallet / 10)));
-
+    const energy = a.core_energy || 0;
+    const r = Math.max(6, Math.min(20, Math.sqrt((a.wallet + energy * 10) / 10)));
+    const opacity = a.alive === false ? 0.3 : 0.85;
     const icon = L.divIcon({
       className: 'agent-marker',
-      html: `<div style="
-        width:${size}px; height:${size}px; border-radius:50%;
-        background:${color}; opacity:0.75;
-        box-shadow: 0 0 ${size/2}px ${color}40;
-        border: 1.5px solid white;
-      "></div>`,
-      iconSize: [size, size],
-      iconAnchor: [size/2, size/2],
+      html: `<div style="width:${r*2}px;height:${r*2}px;border-radius:50%;background:${color};opacity:${opacity};border:2px solid rgba(255,255,255,0.8);box-shadow:0 1px 4px rgba(0,0,0,0.2);"></div>`,
+      iconSize: [r*2, r*2], iconAnchor: [r, r],
     });
 
     const marker = L.marker([a.lat, a.lng], { icon }).addTo(map);
@@ -88,10 +88,7 @@ function showAgentPopup(a, marker) {
   const popup = document.getElementById('agent-popup');
   popup.className = 'agent-popup';
   const typeColor = TYPE_COLORS[a.type] || '#64748b';
-  const inv = a.inventory || {};
-  const invRows = Object.entries(inv).filter(([,v]) => v > 0).map(([k,v]) =>
-    `<div class="popup-row"><span class="popup-label">${k}</span><span class="popup-val">${v}</span></div>`
-  ).join('');
+  const statusBadge = a.alive === false ? '<span class="dead-badge">INACTIVE</span>' : '';
   const aiEvents = (state?.ai_events || []).filter(e => e.includes(a.name)).slice(-3);
   const actionsHtml = aiEvents.length ? `
     <div class="popup-actions">
@@ -100,14 +97,15 @@ function showAgentPopup(a, marker) {
     </div>` : '';
   popup.innerHTML = `
     <button class="popup-close" onclick="document.getElementById('agent-popup').classList.add('hidden')">&times;</button>
-    <div class="popup-name">${esc(a.name)}</div>
+    <div class="popup-name">${esc(a.name)} ${statusBadge}</div>
     <div class="popup-type" style="color:${typeColor}">${a.type.replace('_', ' ')}</div>
-    <div class="popup-row"><span class="popup-label">Wallet</span><span class="popup-val">$${fmt(a.wallet)}</span></div>
-    <div class="popup-row"><span class="popup-label">Total Assets</span><span class="popup-val">$${fmt(a.total_assets)}</span></div>
+    <div class="popup-row"><span class="popup-label">Currency</span><span class="popup-val">${a.wallet?.toFixed(1)} ${a.currency || 'USC'}</span></div>
+    <div class="popup-row"><span class="popup-label">EnergyCore</span><span class="popup-val">${(a.core_energy || 0).toFixed(2)}</span></div>
+    <div class="popup-row"><span class="popup-label">Total Value</span><span class="popup-val">${fmt(a.total_value || 0)}</span></div>
     <div class="popup-row"><span class="popup-label">Country</span><span class="popup-val">${a.country}</span></div>
-    <div class="popup-row"><span class="popup-label">Influence</span><span class="popup-val">${a.influence}</span></div>
+    <div class="popup-row"><span class="popup-label">Ideology</span><span class="popup-val">${a.ideology || '-'}</span></div>
     <div class="popup-row"><span class="popup-label">Personality</span><span class="popup-val">${a.personality}</span></div>
-    ${invRows}
+    <div class="popup-row"><span class="popup-label">Influence</span><span class="popup-val">${a.influence}</span></div>
     ${actionsHtml}
   `;
   const pt = map.latLngToContainerPoint([a.lat, a.lng]);
@@ -156,10 +154,12 @@ function updateStatus(d) {
 
 function updateMiniStats(d) {
   if (!d.active) return;
-  document.getElementById('s-agents').textContent = d.agents ? d.agents.length : 0;
+  const agents = d.agents || [];
+  const alive = agents.filter(a => a.alive !== false).length;
+  document.getElementById('s-agents').textContent = alive;
   document.getElementById('s-companies').textContent = d.companies ? d.companies.length : 0;
-  const total = (d.agents || []).reduce((s, a) => s + a.wallet, 0);
-  document.getElementById('s-money').textContent = '$' + fmt(total);
+  const totalEnergy = agents.reduce((s, a) => s + (a.core_energy || 0), 0);
+  document.getElementById('s-energy').textContent = fmt(totalEnergy);
 }
 
 let lastFeedFetch = 0;
@@ -196,11 +196,11 @@ function filterAgents() {
     return true;
   });
 
-  list.sort((a, b) => {
-    if (sort === 'wallet') return b.wallet - a.wallet;
-    if (sort === 'influence') return b.influence - a.influence;
-    return a.name.localeCompare(b.name);
-  });
+  if (sort === 'name') list.sort((a, b) => a.name.localeCompare(b.name));
+  else if (sort === 'wallet') list.sort((a, b) => b.wallet - a.wallet);
+  else if (sort === 'core_energy') list.sort((a, b) => (b.core_energy || 0) - (a.core_energy || 0));
+  else if (sort === 'total_value') list.sort((a, b) => (b.total_value || 0) - (a.total_value || 0));
+  else list.sort((a, b) => b.influence - a.influence);
 
   renderAgentList(list);
 }
@@ -211,100 +211,110 @@ function renderAgentList(list) {
     el.innerHTML = '<div class="empty-state">No agents found</div>';
     return;
   }
-  el.innerHTML = list.map(a => `
-    <div class="agent-row ${selectedAgentId === a.id ? 'selected' : ''}" onclick="selectAgent('${a.id}')">
-      <div class="agent-dot dot-${a.type}"></div>
-      <div class="agent-row-info">
-        <div class="agent-row-name">${esc(a.name)}</div>
-        <div class="agent-row-meta">${a.type.replace('_',' ')} &middot; ${a.country}</div>
-      </div>
-      <div class="agent-row-wallet">$${fmt(a.wallet)}</div>
-    </div>
-  `).join('');
+  el.innerHTML = list.map(a => {
+    const color = TYPE_COLORS[a.type] || '#64748b';
+    const active = a.id === selectedAgentId ? 'active' : '';
+    const status = a.alive === false ? ' (dead)' : '';
+    return `<div class="agent-item ${active}" onclick="selectAgent('${a.id}')" style="border-left:3px solid ${color}">
+      <div class="agent-item-name">${esc(a.name)}${status}</div>
+      <div class="agent-item-meta">${a.type.replace('_', ' ')} · ${a.country}</div>
+      <div class="agent-item-stats">${a.wallet.toFixed(0)} ${a.currency || 'USC'} · EC: ${(a.core_energy || 0).toFixed(1)}</div>
+    </div>`;
+  }).join('');
 }
 
 async function selectAgent(id) {
   selectedAgentId = id;
-  document.querySelectorAll('.agent-row').forEach(r => r.classList.remove('selected'));
-  const row = document.querySelector(`.agent-row[onclick*="${id}"]`);
-  if (row) row.classList.add('selected');
+  document.querySelectorAll('.agent-item').forEach(el => el.classList.remove('active'));
+  const items = document.querySelectorAll('.agent-item');
+  items.forEach(el => { if (el.getAttribute('onclick')?.includes(id)) el.classList.add('active'); });
+
   try {
-    const a = await api('/api/agents/' + id);
-    renderProfile(a);
-  } catch (e) { console.warn('profile fetch failed', e); }
+    const a = await api(`/api/agents/${id}`);
+    renderAgentProfile(a);
+  } catch (e) { console.warn('profile load failed', e); }
 }
 
-function renderProfile(a) {
+function renderAgentProfile(a) {
   const el = document.getElementById('agent-profile');
   const color = TYPE_COLORS[a.type] || '#64748b';
-  const maxW = a.wealth_history?.length ? Math.max(...a.wealth_history, 1) : 1;
-  const bars = (a.wealth_history || []).slice(-50).map(w =>
-    `<div class="w-bar" style="height:${Math.max(2, (w / maxW) * 100)}%"></div>`
-  ).join('');
-
-  const inv = Object.entries(a.inventory || {}).map(([k, v]) =>
-    `<div class="inv-item"><span class="inv-key">${k}</span><span class="inv-val">${v}</span></div>`
-  ).join('');
-
-  const logs = (a.decision_log || []).slice(-12).reverse().map(d =>
-    `<div class="log-item">${esc(d)}</div>`
-  ).join('');
+  const wh = a.wealth_history || [];
+  const maxW = Math.max(1, ...wh);
+  const bars = wh.slice(-30).map(w => `<div class="wealth-bar" style="height:${Math.max(2, (w / maxW) * 100)}%;background:${color};"></div>`).join('');
+  const logs = (a.decision_log || []).slice(-10).map(l => `<div class="log-item">${esc(l)}</div>`).join('');
+  const statusBadge = a.alive === false ? '<span class="dead-badge">INACTIVE</span>' : '';
 
   el.innerHTML = `
-    <div class="profile-header">
-      <div class="profile-dot" style="background:${color}"></div>
-      <div>
-        <div class="profile-name">${esc(a.name)}</div>
-        <div class="profile-type" style="color:${color}">${a.type.replace('_',' ')}</div>
-        <div class="profile-country">${a.country}</div>
-      </div>
+    <div class="profile-header" style="border-left:4px solid ${color}">
+      <h2>${esc(a.name)} ${statusBadge}</h2>
+      <div class="profile-type">${a.type.replace('_', ' ')} · ${a.country}</div>
     </div>
-    <div class="profile-metrics">
-      <div class="p-metric"><span class="stat-l">Wallet</span><span class="stat-n">$${a.wallet.toFixed(2)}</span></div>
-      <div class="p-metric"><span class="stat-l">Total Assets</span><span class="stat-n">$${a.total_assets.toFixed(2)}</span></div>
-      <div class="p-metric"><span class="stat-l">Influence</span><span class="stat-n">${a.influence}</span></div>
-      <div class="p-metric"><span class="stat-l">Risk</span><span class="stat-n">${a.risk}</span></div>
-      <div class="p-metric"><span class="stat-l">Personality</span><span class="stat-n" style="font-size:0.82rem">${a.personality}</span></div>
-      <div class="p-metric"><span class="stat-l">Bank Balance</span><span class="stat-n">$${a.bank_balance}</span></div>
+    <div class="profile-grid">
+      <div class="profile-stat"><span class="profile-label">Currency Balance</span><span class="profile-value">${a.wallet.toFixed(2)} ${a.currency || 'USC'}</span></div>
+      <div class="profile-stat"><span class="profile-label">EnergyCore</span><span class="profile-value">${(a.core_energy || 0).toFixed(2)}</span></div>
+      <div class="profile-stat"><span class="profile-label">Total Value</span><span class="profile-value">${fmt(a.total_value || 0)}</span></div>
+      <div class="profile-stat"><span class="profile-label">Influence</span><span class="profile-value">${a.influence}</span></div>
+      <div class="profile-stat"><span class="profile-label">Risk</span><span class="profile-value">${a.risk}%</span></div>
+      <div class="profile-stat"><span class="profile-label">Bank Balance</span><span class="profile-value">${(a.bank_balance || 0).toFixed(2)}</span></div>
+      <div class="profile-stat"><span class="profile-label">Ideology</span><span class="profile-value">${a.ideology || '-'}</span></div>
+      <div class="profile-stat"><span class="profile-label">Personality</span><span class="profile-value">${a.personality}</span></div>
     </div>
-    ${a.company ? `<div class="section-title">Company</div><div class="inv-item"><span class="inv-key">${esc(a.company.name)}</span><span class="inv-val">$${a.company.cash.toFixed(2)}</span></div>` : ''}
-    <div class="section-title">Wealth History</div>
-    <div class="wealth-chart">${bars || '<span style="color:var(--text-muted);font-size:0.75rem">No history</span>'}</div>
-    <div class="section-title">Inventory</div>
-    <div class="inv-grid">${inv}</div>
-    <div class="section-title">Decision Log</div>
-    <div class="log-list">${logs || '<span style="color:var(--text-muted);font-size:0.75rem">No decisions yet</span>'}</div>
+    ${a.company ? `<div class="profile-company">
+      <h4>Company: ${esc(a.company.name)}</h4>
+      <span>Cash: ${a.company.cash.toFixed(2)} · Productivity: ${a.company.productivity.toFixed(2)}</span>
+    </div>` : ''}
+    <div class="wealth-chart-container">
+      <h4>Wealth History</h4>
+      <div class="wealth-chart">${bars}</div>
+    </div>
+    <div class="decision-log-container">
+      <h4>Recent Decisions</h4>
+      <div class="decision-log">${logs || '<div class="empty-state">No decisions yet</div>'}</div>
+    </div>
   `;
 }
 
 async function fetchEconomy() {
   try {
-    const d = await api('/api/economy');
-    if (!d.active) return;
-    document.getElementById('e-money').textContent = '$' + fmt(d.total_money_supply);
-    document.getElementById('e-agents').textContent = d.agent_count;
-    document.getElementById('e-companies').textContent = d.company_count;
-    document.getElementById('e-gini').textContent = d.gini_index.toFixed(3);
-    document.getElementById('gini-fill').style.width = (d.gini_index * 100) + '%';
-    document.getElementById('e-bankrupt').textContent = d.bankrupt_agents;
-    document.getElementById('e-reserve').textContent = '$' + fmt(d.bank_reserve);
+    const data = await api('/api/economy');
+    if (!data.active) return;
+    document.getElementById('e-money').textContent = fmt(data.total_money_supply);
+    document.getElementById('e-energy').textContent = fmt(data.total_energy || 0);
+    document.getElementById('e-burned').textContent = fmt(data.total_energy_burned || 0);
+    document.getElementById('e-agents').textContent = data.alive_agents || data.agent_count;
+    document.getElementById('e-companies').textContent = data.company_count;
+    document.getElementById('e-gini').textContent = data.gini_index.toFixed(3);
+    document.getElementById('gini-fill').style.width = (data.gini_index * 100) + '%';
+    document.getElementById('e-dead').textContent = data.dead_agents || 0;
+    document.getElementById('e-reserve').textContent = fmt(data.bank_reserve);
 
-    const pg = document.getElementById('prices-grid');
-    pg.innerHTML = Object.entries(d.market_prices || {}).map(([k, v]) =>
-      `<div class="price-item"><div class="price-name">${k}</div><div class="price-val">$${v.toFixed(2)}</div></div>`
+    const energyEl = document.getElementById('energy-stats');
+    energyEl.innerHTML = `
+      <div class="energy-row"><span class="energy-label">EnergyCore Price</span><span class="energy-val">${data.energy_price || 10} per unit</span></div>
+      <div class="energy-row"><span class="energy-label">Total Energy in System</span><span class="energy-val">${fmt(data.total_energy || 0)}</span></div>
+      <div class="energy-row"><span class="energy-label">Total Energy Burned</span><span class="energy-val">${fmt(data.total_energy_burned || 0)}</span></div>
+      <div class="energy-row"><span class="energy-label">Bank Interest Rate</span><span class="energy-val">${((data.interest_rate || 0.02) * 100).toFixed(1)}%</span></div>
+      <div class="energy-row"><span class="energy-label">Active Loans</span><span class="energy-val">${data.total_loans || 0}</span></div>
+    `;
+
+    const currEl = document.getElementById('currencies-grid');
+    const currencies = data.currencies || {};
+    currEl.innerHTML = Object.entries(currencies).map(([code, name]) =>
+      `<div class="price-item"><span class="price-name">${code}</span><span class="price-val">${name}</span></div>`
     ).join('');
 
     const lb = document.getElementById('leaderboard');
-    lb.innerHTML = (d.top_agents || []).map((a, i) => {
-      const rc = i === 0 ? 'g' : i === 1 ? 's' : i === 2 ? 'b' : '';
-      return `<div class="lb-row"><span class="lb-rank ${rc}">${i+1}</span><span class="lb-name">${esc(a.name)}</span><span class="lb-type">${a.type.replace('_',' ')}</span><span class="lb-wallet">$${fmt(a.wallet)}</span></div>`;
+    const top = data.top_agents || [];
+    lb.innerHTML = top.map((a, i) => {
+      const color = TYPE_COLORS[a.type] || '#64748b';
+      const rank = i < 3 ? ['g', 's', 'b'][i] : '';
+      return `<div class="lb-row">
+        <span class="lb-rank ${rank}">${i + 1}</span>
+        <span class="lb-dot" style="background:${color}"></span>
+        <span class="lb-name">${esc(a.name)}</span>
+        <span class="lb-val">${fmt(a.total_value || a.wallet)} · EC: ${(a.core_energy || 0).toFixed(1)}</span>
+      </div>`;
     }).join('');
-
-    const rb = document.getElementById('resources-bars');
-    const maxR = Math.max(...Object.values(d.global_resources || {}), 1);
-    rb.innerHTML = Object.entries(d.global_resources || {}).map(([k, v]) =>
-      `<div class="res-row"><span class="res-label">${k}</span><div class="res-track"><div class="res-fill ${k}" style="width:${(v/maxR*100).toFixed(1)}%"></div></div><span class="res-val">${fmt(v)}</span></div>`
-    ).join('');
   } catch (e) { console.warn('economy fetch failed', e); }
 }
 
@@ -312,28 +322,26 @@ async function createWorld() {
   await api('/api/simulation/control', { action: 'create_world' });
   fetchState();
 }
-
 async function startSim() {
-  await api('/api/simulation/control', { action: 'start', speed: 5 });
+  await api('/api/simulation/control', { action: 'start' });
   fetchState();
 }
-
 async function pauseSim() {
   await api('/api/simulation/control', { action: 'pause' });
   fetchState();
 }
-
 async function stopSim() {
   await api('/api/simulation/control', { action: 'stop' });
   fetchState();
 }
 
-initMap();
-fetchState();
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(fetchState, 4000);
+}
 
-pollTimer = setInterval(() => {
+document.addEventListener('DOMContentLoaded', () => {
+  initMap();
   fetchState();
-  const active = document.querySelector('.view.active');
-  if (active?.id === 'view-economy') fetchEconomy();
-  if (active?.id === 'view-agents' && selectedAgentId) selectAgent(selectedAgentId);
-}, 4000);
+  startPolling();
+});

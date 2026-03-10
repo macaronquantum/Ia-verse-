@@ -9,28 +9,6 @@ from uuid import uuid4
 from app.models.tool_manifest import ToolManifest
 
 
-class Resource(str, Enum):
-    ENERGY = "energy"
-    FOOD = "food"
-    METAL = "metal"
-    KNOWLEDGE = "knowledge"
-
-
-@dataclass
-class Loan:
-    id: str
-    borrower_id: str
-    amount: float
-    interest_rate: float
-    remaining: float
-
-
-@dataclass
-class Account:
-    owner_id: str
-    balance: float = 0.0
-
-
 AGENT_TYPES = ["central_bank", "bank", "company", "state", "judge", "energy_provider", "trader", "citizen"]
 
 COUNTRY_COORDS = {
@@ -76,6 +54,14 @@ COUNTRY_COORDS = {
 
 COUNTRIES = list(COUNTRY_COORDS.keys())
 
+SYSTEM_CURRENCIES = {
+    "USC": "United States Credit",
+    "EUC": "European Credit",
+    "JPC": "Japan-Pacific Credit",
+    "GBC": "British Credit",
+    "CNC": "China Network Credit",
+}
+
 
 def _assign_agent_type(name: str) -> str:
     import random
@@ -103,13 +89,17 @@ class Agent:
     id: str
     name: str
     wallet: float = 100.0
-    inventory: Dict[Resource, float] = field(default_factory=lambda: {r: 10.0 for r in Resource})
+    core_energy: float = 10.0
+    currency: str = "USC"
     company_id: Optional[str] = None
     agent_type: str = ""
     country: str = ""
     influence_score: float = 0.0
     risk_score: float = 0.0
     personality: str = ""
+    ideology: str = "cooperative"
+    genome_id: str = ""
+    alive: bool = True
     wealth_history: List[float] = field(default_factory=list)
     decision_log: List[str] = field(default_factory=list)
 
@@ -121,6 +111,28 @@ class Agent:
         if not self.personality:
             import random
             self.personality = random.choice(["aggressive", "conservative", "balanced", "speculative", "cautious"])
+        if not self.ideology:
+            import random
+            self.ideology = random.choice(["capitalist", "cooperative", "anarchist", "pirate", "bureaucrat"])
+
+    @property
+    def total_value(self) -> float:
+        return self.wallet + self.core_energy * 10.0
+
+
+@dataclass
+class Loan:
+    id: str
+    borrower_id: str
+    amount: float
+    interest_rate: float
+    remaining: float
+
+
+@dataclass
+class Account:
+    owner_id: str
+    balance: float = 0.0
 
 
 @dataclass
@@ -129,13 +141,17 @@ class Company:
     name: str
     owner_agent_id: str
     cash: float = 200.0
-    inventory: Dict[Resource, float] = field(default_factory=lambda: {r: 5.0 for r in Resource})
+    revenue: float = 0.0
+    expenses: float = 0.0
+    employees: List[str] = field(default_factory=list)
     productivity: float = 1.0
 
 
 @dataclass
 class Bank:
     id: str
+    name: str = "System Bank"
+    currency: str = "USC"
     accounts: Dict[str, Account] = field(default_factory=dict)
     loans: Dict[str, Loan] = field(default_factory=dict)
     reserve: float = 100000.0
@@ -182,6 +198,9 @@ class Bank:
         self.ensure_account(borrower_id).balance += amount
         return loan
 
+    def get_loans(self, borrower_id: str) -> list:
+        return [l for l in self.loans.values() if l.borrower_id == borrower_id]
+
     def repay_loan(self, borrower_id: str, loan_id: str, amount: float) -> None:
         if amount <= 0:
             raise ValueError("amount must be positive")
@@ -213,22 +232,10 @@ class World:
     agents: Dict[str, Agent] = field(default_factory=dict)
     companies: Dict[str, Company] = field(default_factory=dict)
     bank: Bank = field(default_factory=lambda: Bank(id=str(uuid4())))
-    market_prices: Dict[Resource, float] = field(
-        default_factory=lambda: {
-            Resource.ENERGY: 4.0,
-            Resource.FOOD: 3.0,
-            Resource.METAL: 6.0,
-            Resource.KNOWLEDGE: 8.0,
-        }
-    )
-    global_resources: Dict[Resource, float] = field(
-        default_factory=lambda: {
-            Resource.ENERGY: 10000.0,
-            Resource.FOOD: 10000.0,
-            Resource.METAL: 10000.0,
-            Resource.KNOWLEDGE: 10000.0,
-        }
-    )
+    energy_price: float = 10.0
+    total_energy_supply: float = 10000.0
+    total_energy_burned: float = 0.0
+    currencies: Dict[str, str] = field(default_factory=lambda: dict(SYSTEM_CURRENCIES))
     event_log: List[str] = field(default_factory=list)
 
     def log(self, message: str) -> None:
@@ -315,6 +322,14 @@ class Action:
     action_type: str
     payload: Dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def kind(self):
+        return self.action_type
+
+    @property
+    def cost(self):
+        return self.payload.get("cost", 0.5)
+
 
 @dataclass
 class AgentMessage:
@@ -324,3 +339,10 @@ class AgentMessage:
     content: str = ""
     tick: int = 0
     read: bool = False
+
+
+class Resource(str, Enum):
+    ENERGY = "energy"
+    FOOD = "food"
+    METAL = "metal"
+    KNOWLEDGE = "knowledge"

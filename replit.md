@@ -1,7 +1,7 @@
-# IA-Verse Backend
+# IA-Verse
 
 ## Overview
-A FastAPI-based virtual world simulation backend (economic game) with a premium futuristic dashboard frontend. Claude AI agents make real decisions each tick, with companies, banks, loans, and markets. All 14 GitHub branches have been merged into a unified codebase.
+An AI multi-agent economic system where Claude AI agents make real economic decisions each tick. EnergyCore represents real computational cost — agents must acquire EnergyCore to reason, act, and survive. Central banks create their own currencies backed by EnergyCore. Agents seek investment, generate revenue, and manage banking relationships. Built with FastAPI + Leaflet.js dashboard.
 
 ## Architecture
 - **Language**: Python 3.11
@@ -11,104 +11,54 @@ A FastAPI-based virtual world simulation backend (economic game) with a premium 
 - **No database**: All state is in-memory via the `WorldEngine`
 - **Port**: 5000
 
-## Project Structure
-- `app/main.py` — FastAPI app, REST endpoints, dashboard API, static file serving, auto-simulation loop
-- `app/simulation/__init__.py` — Core `WorldEngine` simulation logic (resource regen, dividends, wage system, autonomous scheduler, AI agent decisions)
-- `app/simulation/engine.py` — Advanced `SimulationEngine` with energy ledger, economy, justice, LLM router
-- `app/models/__init__.py` — Core data models (World, Agent, Company, Bank, Loan, AgentGoal, AgentTask, AgentState, Action, etc.) with enriched Agent fields (type, country, influence, risk, personality, wealth_history, decision_log)
-- `app/models/tool_manifest.py` — ToolManifest Pydantic model for the tool marketplace
-- `app/config.py` — Settings, EVOLUTION config, COSTS config
-- `app/agents/` — AI agent modules: brain, planner, executor, goal system, memory manager, tool factory/selector, evolution, genome, personality, scheduler, agent factory, network
-- `app/api_gateway/` — API gateway with costs, registry, sandbox runners (Docker/WASM)
-- `app/economy/` — Market system, order books, AMM pricing, economy coordinator, FX market
-- `app/energy/` — Energy ledger, global energy costs, CoreEnergyLedger, CoreEnergyMarket
-- `app/business/` — Business provisioning engine
-- `app/memory/` — Episodic memory (AgentMemory), global store (personalities, genomes, lineage)
-- `app/persistence/` — Persistence store with tamper-evident log chain
-- `app/justice/` — Justice system (JusticeSystem, JudgeAI) with action review, freeze/fine/ban
-- `app/institutions/` — Central banks, institution coordinator, bootstrap
-- `app/oracles/` — Oracle mint agent with real-value proofs
-- `app/observability/` — Metrics (Metrics, MetricsStore, MetricsCollector)
-- `app/integrations/` — Alchemy client, Solana gateway, human marketplace
-- `app/culture/` — Belief engine, movements, social influence
-- `app/llm/` — LLM adapters (HybridLLMAdapter with real Claude API, ModelRouter, LLMCostEngine)
-- `app/world/` — World state and crisis engine
-- `app/social/` — Social network and messaging
-- `app/humans/` — Human task dispatcher
-- `app/sensing/` — Sensing streams
-- `app/api/` — Monitoring API router
-- `web/dashboard/index.html` — Dashboard SPA shell with glassmorphism nav, 4 views
-- `web/dashboard/style.css` — Full glassmorphism/liquid glass styling with animations
-- `web/dashboard/app.js` — Complete dashboard JS: globe (Three.js), agent explorer, economy, controls, live feed, auto-polling
-- `scripts/` — Settlement daily script
-- `tests/` — pytest test suite (61 tests, 38 passing)
+## Core Economic Principles
+- **EnergyCore**: The fundamental resource representing real computational capacity. Agents burn EnergyCore for AI reasoning, actions, and maintenance. If EnergyCore reaches 0, the agent dies.
+- **System Currencies**: 5 currencies backed by EnergyCore, each created by a central bank:
+  - USC (United States Credit) — Federal Reserve
+  - EUC (European Credit) — ECB
+  - JPC (Japan-Pacific Credit) — Bank of Japan
+  - GBC (British Credit) — Bank of England
+  - CNC (China Network Credit) — People's Bank of China
+- **Banking**: Commercial banks lend capital, manage deposits, charge interest
+- **Agent Actions**: request_investment, acquire_energy, generate_revenue, deposit, withdraw, take_loan, create_company, hire_worker, set_interest_rate, inject_liquidity, idle
 
-## Dashboard Features
-- **Flat World Map**: Leaflet.js planisphere with CARTO light tiles, pan/zoom, agent markers with type-based colors and size proportional to wealth, click to see agent info popup
-- **Agent Explorer**: Searchable/filterable/sortable agent list (by type, wealth, influence, name), click for detailed profile with wealth chart, inventory, decision log, bank balance
-- **Economy Dashboard**: Money supply, Gini index with progress bar, resource bars, market prices, leaderboard with gold/silver/bronze, agent/company counts, bankruptcies
-- **Simulation Controls**: Create world (bootstraps 101 agents: 5 central banks, 20 banks, 20 companies, 10 states, 5 judges, 1 energy provider, 40 citizens across 100 countries), Start/Pause/Stop, auto-sim at 5s/tick
-- **Live AI Feed**: Real-time Claude AI decision events in glassmorphism feed panel
-- **Auto-polling**: State refreshes every 4 seconds
-- **Design**: Light theme, elegant glassmorphism, Inter font, sober/minimal colors, fully responsive (desktop/tablet/mobile)
+## Project Structure
+- `app/main.py` — FastAPI app, REST endpoints, dashboard API, world bootstrap, auto-simulation loop
+- `app/simulation/__init__.py` — Core `WorldEngine` with EnergyCore-based economics, AI agent decisions, energy ledger integration
+- `app/simulation/engine.py` — Advanced `SimulationEngine` with energy ledger, economy, justice, LLM router
+- `app/models/__init__.py` — Core data models (World, Agent, Company, Bank, Loan) with EnergyCore fields, system currencies
+- `app/config.py` — Settings, EVOLUTION config, COSTS config
+- `app/energy/core.py` — EnergyLedger (mint/burn/transfer/charge), CoreEnergyLedger, GlobalEnergyCosts
+- `app/agents/` — Personality system, genome/DNA, evolution, mutation, imitation, mind/cognition, beliefs
+- `app/llm/adapters.py` — HybridLLMAdapter with Claude API, ModelRouter, LLMCostEngine
+- `app/economy/` — Market system, economy coordinator, FX market
+- `app/institutions/` — Central banks, institution coordinator
+- `app/justice/` — Justice system (JudgeAI) with action review
+- `app/culture/` — Belief engine, movements, social influence
+- `app/social/` — Social network and messaging
+- `web/dashboard/` — Dashboard frontend (index.html, style.css, app.js)
 
 ## World Bootstrap (create_world)
-- 5 central banks (Federal Reserve, ECB, BoJ, BoE, PBoC) with $10K each
-- 20 commercial banks (JPMorgan, Goldman Sachs, HSBC, etc.) with $1K each
-- 20 companies (TechCorp, EnergyMax, etc.) with $500 each
-- 10 states (USA, China, Germany, etc.) with $5K each
-- 5 judges across continents with $200 each
-- 1 World Energy Authority with $50K
-- 40 random citizens across 100 countries with $100 each
+- 5 central banks with own currencies + 500 EnergyCore each + 10K currency
+- 20 commercial banks with 50 EnergyCore + 1K currency
+- 20 companies with 30 EnergyCore + 500 currency
+- 10 states with 100 EnergyCore + 5K currency
+- 5 judges with 20 EnergyCore + 200 currency
+- 1 EnergyCore Authority with 5000 EnergyCore + 50K currency
+- 60 citizens across 100 countries with 5 EnergyCore + 100 currency
 - AI tick limit: 10 agents per tick (random subset) for performance
+- Total: ~121 agents
 
-## Dashboard API Endpoints
-- `GET /api/simulation/state` — Full world state (agents, companies, prices, events)
-- `GET /api/agents` — All agents with enriched data
-- `GET /api/agents/{id}` — Agent profile with history
-- `GET /api/economy` — Economy metrics (money supply, Gini, leaderboard)
-- `POST /api/simulation/control` — Actions: create_world, start, pause, speed, tick, spawn_agent
+## Dashboard Features
+- **Flat World Map**: Leaflet.js planisphere, agent markers with type-based colors and size proportional to value
+- **Agent Explorer**: Search/filter/sort by type, currency, EnergyCore, influence. Agent profile with wealth chart, decisions, bank balance
+- **Economy Dashboard**: Money supply, total EnergyCore, energy burned, Gini index, alive/dead agents, bank reserve, currencies, leaderboard
+- **Simulation Controls**: Create world, Start/Pause/Stop, manual tick
+- **Live Feed**: Real-time economic events from /api/events/feed
+- **Auto-polling**: State refreshes every 4 seconds
+- **Design**: Light theme, glassmorphism, Inter font, responsive (desktop/tablet/mobile)
 
-## Key Simulation Features
-- Resource regeneration per tick (energy, food, metal, knowledge)
-- Wage system: agents pay from wallet to company (no money creation)
-- Sold goods return to global resources
-- Dividends: profitable companies pay owners
-- Interest rate scaled down for per-tick compounding
-- Crisis engine: energy shortage, bank run, wars, oracle failure, economic collapse
-- Agent evolution: genome, personality, mutation, crossover, imitation
-- Tool marketplace: register, publish, purchase, rate tools
-- Energy system: minting, burning, reserves, transfers
-- Justice system: action review, freeze, fine, ban agents
-- Autonomous scheduler: background cycles, goals, tasks, memory, metrics
-- AI-powered agent decisions: each agent calls Claude to decide buy/sell/invest/loan actions each tick
-- Agent enrichment: type, country, influence score, risk score, personality, wealth history, decision log
-
-## Running Locally
+## Running
 ```
 uvicorn app.main:app --host 0.0.0.0 --port 5000 --reload
 ```
-
-## API Endpoints
-- `GET /` — Redirect to dashboard
-- `GET /dashboard` — Dashboard UI
-- `GET /health` — Health check
-- `POST /worlds` — Create a new world
-- `GET /worlds/{world_id}` — Get world state
-- `POST /worlds/{world_id}/agents` — Create an AI agent
-- `POST /worlds/{world_id}/companies` — Create a company
-- `POST /worlds/{world_id}/tick` — Advance simulation N ticks
-- `POST /worlds/{world_id}/bank/deposit|withdraw|loan|repay` — Banking operations
-- `GET /monitoring/health|metrics|top_agents|world_map|logs` — Monitoring
-- `GET/POST /gateway/costs` — Cost catalog
-- `POST /gateway/estimate` — Estimate tool call cost
-- `POST /tools/register|publish` — Tool management
-- `GET /tools` — List tools
-- `POST /tools/{tool_id}/call|test` — Call/test tools
-- `GET /marketplace/tools` — Marketplace listings
-- `POST /marketplace/purchase|rate` — Purchase/rate tools
-- `GET /metrics` — Prometheus metrics
-
-## Deployment
-- Target: autoscale
-- Run: `uvicorn app.main:app --host 0.0.0.0 --port 5000`

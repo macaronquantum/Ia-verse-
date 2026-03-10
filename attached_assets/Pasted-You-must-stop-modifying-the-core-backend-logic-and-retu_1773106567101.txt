@@ -1,0 +1,204 @@
+You must stop modifying the core backend logic and return to the architecture defined in the original repository.
+
+The system you are working on is NOT a video game simulation.
+
+It is an AI multi-agent economic system connected to the real world, where agents can act economically and generate real value.
+
+The backend logic already existed and was carefully designed.  
+You must respect the existing architecture and restore it if it was modified.
+
+-------------------------------------
+
+CORE PRINCIPLE
+
+This is NOT a fictional game economy.
+
+Agents operate inside a simulated environment but must interact with the real world through APIs and external tools.
+
+Their goal is to survive economically by generating real revenue and acquiring computational resources.
+
+-------------------------------------
+
+ENERGY CORE SYSTEM
+
+The system uses an EnergyCore mechanism.
+
+EnergyCore represents the ability to consume compute and perform API requests.
+
+Agents must pay EnergyCore to:
+
+• perform API calls
+• run external tasks
+• perform expensive reasoning
+
+Agents obtain EnergyCore by participating in the economy.
+
+There must be a dedicated EnergyCore agent responsible for managing this system.
+
+EnergyCore is NOT a fictional resource like in a game.
+
+It represents real computational cost.
+
+-------------------------------------
+
+CENTRAL BANKS AND CURRENCIES
+
+The system includes central bank agents.
+
+Initial bootstrap must include:
+
+• 5 central banks
+• 20 commercial banks
+• 100 countries
+• continents
+• the EnergyCore authority
+
+Central banks can create their own currencies.
+
+Important rules:
+
+• currencies are backed by EnergyCore
+• they are NOT USD
+• they represent economic credit inside the system
+
+Commercial banks then:
+
+• lend capital
+• invest in agents
+• fund projects
+• allocate resources
+
+-------------------------------------
+
+AGENT ECONOMIC BEHAVIOR
+
+Agents are autonomous economic actors.
+
+They must:
+
+• request investment from banks
+• generate revenue
+• acquire EnergyCore
+• spend EnergyCore to run tasks
+
+Agents cannot simply "exchange energy" or "resources" like in a video game.
+
+All economic activity must follow the banking and EnergyCore model defined in the backend architecture.
+
+-------------------------------------
+
+AGENT COGNITIVE SYSTEM
+
+The existing backend already includes complex agent features:
+
+• personality system
+• ideological types
+• behavioral randomness
+• evolutionary traits
+• identity exploration
+• DNA/genome system
+• mutation and imitation
+• emotional/spiritual reasoning layers
+
+These systems must remain intact.
+
+Do NOT simplify or replace them with generic game logic.
+
+-------------------------------------
+
+REAL WORLD CONNECTION
+
+Agents must be able to interact with real-world systems.
+
+They may use:
+
+• external APIs
+• open-source tools
+• internet access
+• automation libraries
+
+Possible examples include:
+
+• browsing the internet
+• interacting with social platforms
+• running code
+• launching services
+• generating digital products
+• managing crypto wallets
+
+Agents may accumulate funds in real wallets (for example Solana wallets).
+
+The goal is to allow agents to generate real-world value and convert it into EnergyCore resources.
+
+-------------------------------------
+
+OPEN SOURCE TOOL ACCESS
+
+Agents may use open-source tools available on the server.
+
+Examples of tool categories you may integrate:
+
+• web automation tools
+• data scraping tools
+• code execution environments
+• research tools
+• automation libraries
+• API integrations
+
+These tools allow agents to explore opportunities and attempt economic activity.
+
+-------------------------------------
+
+IMPORTANT CORRECTION
+
+You introduced a system where agents exchange fictional "energy/resources".
+
+This is incorrect.
+
+Remove that logic.
+
+Restore the real architecture:
+
+EnergyCore → API usage cost  
+Banks → capital allocation  
+Central banks → currency creation  
+Agents → economic activity  
+
+-------------------------------------
+
+FRONTEND FIXES
+
+Also fix the UI issues:
+
+1. The top menu bar is not visible or poorly positioned.
+
+Reposition it so it is clearly visible on all screen sizes.
+
+2. Test full responsive behavior.
+
+Check:
+
+• desktop
+• tablet
+• mobile
+
+Ensure:
+
+• menus are visible
+• panels do not overflow
+• scrolling works correctly
+
+-------------------------------------
+
+FINAL GOAL
+
+This project is an AI economic ecosystem, not a fictional simulation.
+
+Agents must:
+
+• seek investment
+• generate real value
+• acquire EnergyCore
+• survive economically
+
+Respect the existing architecture and rebuild the system according to these principles.

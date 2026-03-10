@@ -277,7 +277,7 @@ html, body {
 #view-economy { padding: 16px; overflow-y: auto; }
 .economy-page { max-width: 1200px; margin: 0 auto; width: 100%; }
 
-.metrics-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+.metrics-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
 .metric { display: flex; flex-direction: column; gap: 6px; }
 .metric-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); font-weight: 500; }
 .metric-value { font-size: 1.4rem; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -314,15 +314,14 @@ html, body {
 .lb-type { font-size: 0.62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .lb-wallet { font-size: 0.8rem; font-weight: 600; color: var(--green); font-variant-numeric: tabular-nums; }
 
-.res-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-.res-label { width: 80px; font-size: 0.72rem; text-transform: capitalize; color: var(--text-secondary); }
-.res-track { flex: 1; height: 6px; background: rgba(0,0,0,0.04); border-radius: 3px; overflow: hidden; }
-.res-fill { height: 100%; border-radius: 3px; transition: width 0.6s; }
-.res-fill.energy { background: #eab308; }
-.res-fill.food { background: #16a34a; }
-.res-fill.metal { background: #64748b; }
-.res-fill.knowledge { background: #7c3aed; }
-.res-val { width: 70px; text-align: right; font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.energy-stats { display: flex; flex-direction: column; gap: 4px; }
+.energy-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.04); }
+.energy-row:last-child { border-bottom: none; }
+.energy-label { font-size: 0.78rem; color: var(--text-secondary); }
+.energy-val { font-size: 0.82rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.lb-val { font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.lb-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dead-badge { font-size: 0.6rem; background: var(--red); color: #fff; padding: 1px 6px; border-radius: 4px; margin-left: 6px; vertical-align: middle; }
 
 .empty-state { padding: 40px; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
 

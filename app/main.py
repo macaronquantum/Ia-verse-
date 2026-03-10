@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.api.monitoring import router as monitoring_router
 from app.api_gateway.gateway import gateway_router
-from app.models import COUNTRY_COORDS, COUNTRIES, Resource
+from app.models import COUNTRY_COORDS, COUNTRIES, SYSTEM_CURRENCIES
 from app.simulation import WorldEngine
 
 
@@ -26,7 +26,7 @@ app.include_router(gateway_router)
 engine = WorldEngine()
 
 _auto_sim_task: Optional[asyncio.Task] = None
-_auto_sim_speed: float = 5.0  # seconds between ticks
+_auto_sim_speed: float = 5.0
 _auto_sim_running: bool = False
 _auto_sim_stopped: bool = False
 _active_world_id: Optional[str] = None
@@ -160,6 +160,23 @@ def repay(world_id: str, payload: RepayRequest) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+CB_CURRENCIES = {
+    "Federal Reserve": "USC",
+    "European Central Bank": "EUC",
+    "Bank of Japan": "JPC",
+    "Bank of England": "GBC",
+    "People's Bank of China": "CNC",
+}
+
+CB_COUNTRIES = {
+    "Federal Reserve": "United States",
+    "European Central Bank": "Germany",
+    "Bank of Japan": "Japan",
+    "Bank of England": "United Kingdom",
+    "People's Bank of China": "China",
+}
+
+
 @app.get("/api/simulation/state")
 def get_simulation_state() -> dict:
     global _active_world_id
@@ -171,20 +188,25 @@ def get_simulation_state() -> dict:
         wid = list(engine.worlds.keys())[-1]
         _active_world_id = wid
     world = engine.worlds[wid]
+    ledger = engine.get_ledger(wid)
     agents_list = []
     for a in world.agents.values():
         coords = COUNTRY_COORDS.get(a.country, (0, 0))
         jitter_seed = hash(a.id) % 1000
         lat_jitter = (jitter_seed / 1000 - 0.5) * 4
         lng_jitter = ((jitter_seed * 7) % 1000 / 1000 - 0.5) * 4
-        total_assets = a.wallet + sum(a.inventory.get(r, 0) * world.market_prices.get(r, 0) for r in Resource)
+        energy = ledger.balance_of(a.id)
         agents_list.append({
             "id": a.id, "name": a.name, "type": a.agent_type, "wallet": round(a.wallet, 2),
-            "total_assets": round(total_assets, 2), "country": a.country,
+            "core_energy": round(energy, 2),
+            "total_value": round(a.wallet + energy * world.energy_price, 2),
+            "currency": a.currency,
+            "country": a.country,
             "lat": coords[0] + lat_jitter, "lng": coords[1] + lng_jitter,
             "influence": a.influence_score, "risk": a.risk_score,
-            "personality": a.personality, "has_company": a.company_id is not None,
-            "inventory": {k.value: round(v, 1) for k, v in a.inventory.items()},
+            "personality": a.personality, "ideology": a.ideology,
+            "has_company": a.company_id is not None,
+            "alive": a.alive,
         })
     companies_list = []
     for c in world.companies.values():
@@ -192,6 +214,7 @@ def get_simulation_state() -> dict:
         companies_list.append({
             "id": c.id, "name": c.name, "owner": owner.name if owner else "unknown",
             "cash": round(c.cash, 2), "productivity": round(c.productivity, 2),
+            "revenue": round(c.revenue, 2),
         })
     ai_events = [e for e in world.event_log if "[AI]" in e]
     return {
@@ -203,9 +226,16 @@ def get_simulation_state() -> dict:
         "tick": world.tick_count,
         "agents": agents_list,
         "companies": companies_list,
-        "market_prices": {k.value: v for k, v in world.market_prices.items()},
-        "global_resources": {k.value: round(v, 1) for k, v in world.global_resources.items()},
-        "bank": {"reserve": round(world.bank.reserve, 2), "loans": len(world.bank.loans), "accounts": len(world.bank.accounts)},
+        "energy_price": world.energy_price,
+        "total_energy_supply": round(world.total_energy_supply, 1),
+        "total_energy_burned": round(world.total_energy_burned, 1),
+        "currencies": world.currencies,
+        "bank": {
+            "reserve": round(world.bank.reserve, 2),
+            "loans": len(world.bank.loans),
+            "accounts": len(world.bank.accounts),
+            "interest_rate": world.bank.base_interest_rate,
+        },
         "events": world.event_log[-50:],
         "ai_events": ai_events[-30:],
     }
@@ -220,18 +250,22 @@ def get_all_agents() -> dict:
     world = engine.worlds.get(wid)
     if not world:
         return {"agents": []}
+    ledger = engine.get_ledger(wid)
     agents = []
     for a in world.agents.values():
         coords = COUNTRY_COORDS.get(a.country, (0, 0))
-        total_assets = a.wallet + sum(a.inventory.get(r, 0) * world.market_prices.get(r, 0) for r in Resource)
+        energy = ledger.balance_of(a.id)
         agents.append({
             "id": a.id, "name": a.name, "type": a.agent_type, "wallet": round(a.wallet, 2),
-            "total_assets": round(total_assets, 2), "country": a.country,
+            "core_energy": round(energy, 2),
+            "total_value": round(a.wallet + energy * world.energy_price, 2),
+            "currency": a.currency, "country": a.country,
             "lat": coords[0], "lng": coords[1],
             "influence": a.influence_score, "risk": a.risk_score,
-            "personality": a.personality, "has_company": a.company_id is not None,
+            "personality": a.personality, "ideology": a.ideology,
+            "has_company": a.company_id is not None,
             "company_id": a.company_id,
-            "inventory": {k.value: round(v, 1) for k, v in a.inventory.items()},
+            "alive": a.alive,
             "wealth_history": a.wealth_history[-50:],
             "decision_log": a.decision_log[-20:],
         })
@@ -250,16 +284,20 @@ def get_agent_profile(agent_id: str) -> dict:
     agent = world.agents.get(agent_id)
     if not agent:
         raise HTTPException(404, "agent not found")
+    ledger = engine.get_ledger(wid)
     coords = COUNTRY_COORDS.get(agent.country, (0, 0))
-    total_assets = agent.wallet + sum(agent.inventory.get(r, 0) * world.market_prices.get(r, 0) for r in Resource)
+    energy = ledger.balance_of(agent.id)
     company = world.companies.get(agent.company_id) if agent.company_id else None
     return {
         "id": agent.id, "name": agent.name, "type": agent.agent_type,
-        "wallet": round(agent.wallet, 2), "total_assets": round(total_assets, 2),
+        "wallet": round(agent.wallet, 2),
+        "core_energy": round(energy, 2),
+        "total_value": round(agent.wallet + energy * world.energy_price, 2),
+        "currency": agent.currency,
         "country": agent.country, "lat": coords[0], "lng": coords[1],
         "influence": agent.influence_score, "risk": agent.risk_score,
-        "personality": agent.personality,
-        "inventory": {k.value: round(v, 1) for k, v in agent.inventory.items()},
+        "personality": agent.personality, "ideology": agent.ideology,
+        "alive": agent.alive,
         "wealth_history": agent.wealth_history,
         "decision_log": agent.decision_log,
         "company": {"id": company.id, "name": company.name, "cash": round(company.cash, 2), "productivity": round(company.productivity, 2)} if company else None,
@@ -274,34 +312,44 @@ def get_economy() -> dict:
     if not wid or wid not in engine.worlds:
         return {"active": False}
     world = engine.worlds[wid]
-    wallets = [a.wallet for a in world.agents.values()]
-    total_money = sum(wallets) + sum(c.cash for c in world.companies.values()) + world.bank.reserve
-    total_energy = world.global_resources.get(Resource.ENERGY, 0) + sum(a.inventory.get(Resource.ENERGY, 0) for a in world.agents.values())
-    sorted_agents = sorted(world.agents.values(), key=lambda a: a.wallet, reverse=True)
+    ledger = engine.get_ledger(wid)
+    values = [a.wallet + ledger.balance_of(a.id) * world.energy_price for a in world.agents.values()]
+    total_money = sum(a.wallet for a in world.agents.values()) + sum(c.cash for c in world.companies.values()) + world.bank.reserve
+    total_energy = sum(ledger.balance_of(a.id) for a in world.agents.values())
+    sorted_agents = sorted(world.agents.values(), key=lambda a: a.wallet + ledger.balance_of(a.id) * world.energy_price, reverse=True)
     gini = 0.0
-    if wallets and len(wallets) > 1:
-        sorted_w = sorted(wallets)
+    if values and len(values) > 1:
+        sorted_w = sorted(values)
         n = len(sorted_w)
         cum = sum((2 * i - n + 1) * w for i, w in enumerate(sorted_w))
         mean = sum(sorted_w) / n
         if mean > 0:
             gini = round(cum / (n * n * mean), 3)
-    bankrupt = sum(1 for a in world.agents.values() if a.wallet < 1)
-    top_agents = [{"name": a.name, "type": a.agent_type, "wallet": round(a.wallet, 2), "country": a.country, "id": a.id} for a in sorted_agents[:10]]
+    dead_agents = sum(1 for a in world.agents.values() if not a.alive)
+    top_agents = [{
+        "name": a.name, "type": a.agent_type,
+        "wallet": round(a.wallet, 2),
+        "core_energy": round(ledger.balance_of(a.id), 2),
+        "total_value": round(a.wallet + ledger.balance_of(a.id) * world.energy_price, 2),
+        "country": a.country, "id": a.id,
+    } for a in sorted_agents[:10]]
     return {
         "active": True,
         "tick": world.tick_count,
         "total_money_supply": round(total_money, 2),
         "total_energy": round(total_energy, 2),
+        "total_energy_burned": round(world.total_energy_burned, 2),
+        "energy_price": world.energy_price,
         "agent_count": len(world.agents),
+        "alive_agents": sum(1 for a in world.agents.values() if a.alive),
+        "dead_agents": dead_agents,
         "company_count": len(world.companies),
-        "bankrupt_agents": bankrupt,
         "gini_index": gini,
         "bank_reserve": round(world.bank.reserve, 2),
+        "interest_rate": world.bank.base_interest_rate,
         "total_loans": len(world.bank.loans),
-        "market_prices": {k.value: round(v, 2) for k, v in world.market_prices.items()},
+        "currencies": world.currencies,
         "top_agents": top_agents,
-        "global_resources": {k.value: round(v, 1) for k, v in world.global_resources.items()},
     }
 
 
@@ -358,93 +406,146 @@ async def simulation_control(payload: SimControlRequest) -> dict:
         name = payload.world_name or f"World-{len(engine.worlds) + 1}"
         world = engine.create_world(name)
         _active_world_id = world.id
+        ledger = engine.get_ledger(world.id)
+
         central_banks = [
-            ("Federal Reserve", "United States"), ("European Central Bank", "Germany"),
-            ("Bank of Japan", "Japan"), ("Bank of England", "United Kingdom"),
-            ("People's Bank of China", "China"),
+            ("Federal Reserve", "United States", "USC", 500.0),
+            ("European Central Bank", "Germany", "EUC", 500.0),
+            ("Bank of Japan", "Japan", "JPC", 500.0),
+            ("Bank of England", "United Kingdom", "GBC", 500.0),
+            ("People's Bank of China", "China", "CNC", 500.0),
         ]
         commercial_banks = [
-            ("JPMorgan Chase", "United States"), ("Goldman Sachs", "United States"),
-            ("HSBC", "United Kingdom"), ("Deutsche Bank", "Germany"),
-            ("BNP Paribas", "France"), ("UBS", "Switzerland"),
-            ("Barclays", "United Kingdom"), ("Credit Suisse", "Switzerland"),
-            ("Santander", "Spain"), ("ING Group", "Netherlands"),
-            ("Mitsubishi UFJ", "Japan"), ("ICBC", "China"),
-            ("Bank of Brazil", "Brazil"), ("Royal Bank of Canada", "Canada"),
-            ("ANZ Bank", "Australia"), ("Standard Chartered", "Singapore"),
-            ("Citibank", "United States"), ("Morgan Stanley", "United States"),
-            ("DBS Bank", "Singapore"), ("Nordea", "Sweden"),
+            ("JPMorgan Chase", "United States", "USC"), ("Goldman Sachs", "United States", "USC"),
+            ("HSBC", "United Kingdom", "GBC"), ("Deutsche Bank", "Germany", "EUC"),
+            ("BNP Paribas", "France", "EUC"), ("UBS", "Switzerland", "EUC"),
+            ("Barclays", "United Kingdom", "GBC"), ("Credit Suisse", "Switzerland", "EUC"),
+            ("Santander", "Spain", "EUC"), ("ING Group", "Netherlands", "EUC"),
+            ("Mitsubishi UFJ", "Japan", "JPC"), ("ICBC", "China", "CNC"),
+            ("Bank of Brazil", "Brazil", "USC"), ("Royal Bank of Canada", "Canada", "USC"),
+            ("ANZ Bank", "Australia", "GBC"), ("Standard Chartered", "Singapore", "GBC"),
+            ("Citibank", "United States", "USC"), ("Morgan Stanley", "United States", "USC"),
+            ("DBS Bank", "Singapore", "GBC"), ("Nordea", "Sweden", "EUC"),
         ]
         companies = [
-            ("TechCorp Global", "United States"), ("EnergyMax", "Saudi Arabia"),
-            ("FoodGlobal Inc", "Brazil"), ("MetalWorks Ltd", "Australia"),
-            ("KnowledgeHub", "India"), ("DataStream", "South Korea"),
-            ("AutoDrive", "Germany"), ("PharmaLife", "Switzerland"),
-            ("AeroSpace One", "France"), ("OceanTrade", "Singapore"),
-            ("MineralCo", "South Africa"), ("AgriTech", "Argentina"),
-            ("SolarPower", "Spain"), ("ChipDesign", "Taiwan"),
-            ("FinanceAI", "United Kingdom"), ("LogiChain", "Netherlands"),
-            ("CloudNet", "Ireland"), ("BioGen", "Denmark"),
-            ("RoboCorp", "Japan"), ("GreenEnergy", "Norway"),
+            ("TechCorp Global", "United States", "USC"), ("EnergyMax", "Saudi Arabia", "USC"),
+            ("FoodGlobal Inc", "Brazil", "USC"), ("MetalWorks Ltd", "Australia", "GBC"),
+            ("KnowledgeHub", "India", "GBC"), ("DataStream", "South Korea", "JPC"),
+            ("AutoDrive", "Germany", "EUC"), ("PharmaLife", "Switzerland", "EUC"),
+            ("AeroSpace One", "France", "EUC"), ("OceanTrade", "Singapore", "GBC"),
+            ("MineralCo", "South Africa", "GBC"), ("AgriTech", "Argentina", "USC"),
+            ("SolarPower", "Spain", "EUC"), ("ChipDesign", "Taiwan", "CNC"),
+            ("FinanceAI", "United Kingdom", "GBC"), ("LogiChain", "Netherlands", "EUC"),
+            ("CloudNet", "Ireland", "EUC"), ("BioGen", "Denmark", "EUC"),
+            ("RoboCorp", "Japan", "JPC"), ("GreenEnergy", "Norway", "EUC"),
         ]
         states = [
-            ("State of USA", "United States"), ("State of China", "China"),
-            ("State of Germany", "Germany"), ("State of Japan", "Japan"),
-            ("State of India", "India"), ("State of Brazil", "Brazil"),
-            ("State of UK", "United Kingdom"), ("State of France", "France"),
-            ("State of Russia", "Russia"), ("State of Australia", "Australia"),
+            ("State of USA", "United States", "USC"), ("State of China", "China", "CNC"),
+            ("State of Germany", "Germany", "EUC"), ("State of Japan", "Japan", "JPC"),
+            ("State of India", "India", "GBC"), ("State of Brazil", "Brazil", "USC"),
+            ("State of UK", "United Kingdom", "GBC"), ("State of France", "France", "EUC"),
+            ("State of Russia", "Russia", "EUC"), ("State of Australia", "Australia", "GBC"),
         ]
         judges = [
-            ("Judge Alpha", "United States"), ("Judge Europa", "Belgium"),
-            ("Judge Asia", "Singapore"), ("Judge Africa", "South Africa"),
-            ("Judge Latam", "Brazil"),
+            ("Judge Alpha", "United States", "USC"), ("Judge Europa", "Belgium", "EUC"),
+            ("Judge Asia", "Singapore", "GBC"), ("Judge Africa", "South Africa", "GBC"),
+            ("Judge Latam", "Brazil", "USC"),
         ]
-        energy_provider = [("World Energy Authority", "UAE")]
-        citizens = [
-            (f"Citizen {c}", c) for c in random.sample(list(COUNTRY_COORDS.keys()), min(40, len(COUNTRY_COORDS)))
-        ]
+        energy_authority = [("EnergyCore Authority", "UAE", "USC")]
+
+        currency_for_country = {}
+        for _, country, ccy, *_ in central_banks:
+            currency_for_country[country] = ccy
+        for _, country, ccy in commercial_banks + companies + states + judges + energy_authority:
+            currency_for_country[country] = ccy
+
         all_agents = []
-        for name_c, country in central_banks:
-            a = engine.create_agent(world.id, name_c)
+
+        for name_c, country, currency, energy_reserve in central_banks:
+            a = engine.create_agent(world.id, name_c, core_energy=energy_reserve)
             a.country = country
             a.agent_type = "central_bank"
+            a.currency = currency
             a.wallet = 10000.0
+            a.ideology = "bureaucrat"
             all_agents.append(a)
-        for name_c, country in commercial_banks:
-            a = engine.create_agent(world.id, name_c)
+
+        for name_c, country, currency in commercial_banks:
+            a = engine.create_agent(world.id, name_c, core_energy=50.0)
             a.country = country
             a.agent_type = "bank"
+            a.currency = currency
             a.wallet = 1000.0
+            a.ideology = "capitalist"
             all_agents.append(a)
-        for name_c, country in companies:
-            a = engine.create_agent(world.id, name_c)
+
+        for name_c, country, currency in companies:
+            a = engine.create_agent(world.id, name_c, core_energy=30.0)
             a.country = country
             a.agent_type = "company"
+            a.currency = currency
             a.wallet = 500.0
             all_agents.append(a)
-        for name_c, country in states:
-            a = engine.create_agent(world.id, name_c)
+
+        for name_c, country, currency in states:
+            a = engine.create_agent(world.id, name_c, core_energy=100.0)
             a.country = country
             a.agent_type = "state"
+            a.currency = currency
             a.wallet = 5000.0
+            a.ideology = "bureaucrat"
             all_agents.append(a)
-        for name_c, country in judges:
-            a = engine.create_agent(world.id, name_c)
+
+        for name_c, country, currency in judges:
+            a = engine.create_agent(world.id, name_c, core_energy=20.0)
             a.country = country
             a.agent_type = "judge"
+            a.currency = currency
             a.wallet = 200.0
             all_agents.append(a)
-        for name_c, country in energy_provider:
-            a = engine.create_agent(world.id, name_c)
+
+        for name_c, country, currency in energy_authority:
+            a = engine.create_agent(world.id, name_c, core_energy=5000.0)
             a.country = country
             a.agent_type = "energy_provider"
+            a.currency = currency
             a.wallet = 50000.0
+            a.ideology = "cooperative"
             all_agents.append(a)
-        for name_c, country in citizens:
-            a = engine.create_agent(world.id, name_c)
+
+        citizen_countries = random.sample(list(COUNTRY_COORDS.keys()), min(60, len(COUNTRY_COORDS)))
+        currency_zones = {
+            "USC": ["United States", "Canada", "Mexico", "Brazil", "Argentina", "Colombia", "Chile", "Peru",
+                     "Venezuela", "Ecuador", "Bolivia", "Paraguay", "Uruguay", "Guatemala", "Cuba",
+                     "Dominican Republic", "Honduras", "Costa Rica", "Panama", "Jamaica", "Trinidad",
+                     "Saudi Arabia", "UAE", "Qatar", "Kuwait", "Bahrain", "Oman", "Iran", "Iraq"],
+            "EUC": ["Germany", "France", "Italy", "Spain", "Netherlands", "Belgium", "Sweden", "Norway",
+                     "Denmark", "Finland", "Poland", "Austria", "Switzerland", "Ireland", "Portugal",
+                     "Czech Republic", "Greece", "Romania", "Hungary", "Ukraine", "Turkey", "Russia",
+                     "Morocco", "Algeria", "Tunisia", "Libya", "Nigeria", "Ghana", "Cameroon", "Senegal",
+                     "Ivory Coast", "Iceland", "Luxembourg", "Malta", "Cyprus", "Estonia", "Latvia",
+                     "Lithuania", "Slovakia", "Slovenia", "Croatia", "Serbia", "Bulgaria"],
+            "GBC": ["United Kingdom", "India", "Australia", "New Zealand", "South Africa", "Kenya",
+                     "Ethiopia", "Tanzania", "Uganda", "Mozambique", "Angola", "DR Congo", "Zimbabwe",
+                     "Rwanda", "Zambia", "Singapore", "Malaysia", "Israel", "Jordan", "Lebanon", "Egypt",
+                     "Georgia", "Azerbaijan"],
+            "JPC": ["Japan", "South Korea", "Thailand", "Vietnam", "Philippines", "Indonesia", "Myanmar",
+                     "Cambodia", "Sri Lanka", "Nepal", "Taiwan", "Mongolia"],
+            "CNC": ["China", "Bangladesh", "Pakistan", "Kazakhstan", "Uzbekistan"],
+        }
+        country_to_currency = {}
+        for ccy, countries_list in currency_zones.items():
+            for c in countries_list:
+                country_to_currency[c] = ccy
+
+        for country in citizen_countries:
+            a = engine.create_agent(world.id, f"Citizen {country}", core_energy=5.0)
             a.country = country
             a.agent_type = "citizen"
+            a.currency = country_to_currency.get(country, "USC")
+            a.wallet = 100.0
             all_agents.append(a)
+
         return {"status": "ok", "world_id": world.id, "agents": len(all_agents)}
 
     if payload.action == "start":
