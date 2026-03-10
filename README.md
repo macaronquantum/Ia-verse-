@@ -60,14 +60,31 @@ L'architecture est pensée pour être enrichie (nouvelles ressources, fiscalité
 python -m pytest -q
 ```
 
-## Autonomous Startup Engine (new)
+## API Gateway v10 (LA-VERSE)
 
-Additional modules implement opportunity scanning, business provisioning, tool publishing, billing reserve/refund, judge controls and human marketplace stubs.
-
-### New commands
-
+### Démarrage rapide gateway
 ```bash
-bash scripts/bootstrap_opportunities.sh
-bash scripts/run_agents_workers.sh
-python scripts/simulate_human_workers.py
+./scripts/setup_gateway_dev.sh
+./scripts/run_gateway.sh
 ```
+
+### Ajouter un connecteur
+1. Créer `app/integrations/<name>_client.py` avec une classe client.
+2. Enregistrer le service via `POST /services/register` (role admin).
+3. Déclarer `external_dependencies` dans le `ToolManifest`.
+
+### Publier un tool
+1. `POST /tools/register`
+2. `POST /tools/{id}/test`
+3. `POST /tools/publish?tool_id=...` avec signature
+
+### Appeler un tool
+- Estimer: `POST /gateway/estimate`
+- Exécuter: `POST /tools/{id}/call` (pré-autorisation CoreEnergy)
+
+### Notes de sécurité
+- Auth headers (`x-agent-id`, `x-role`) et RBAC.
+- Secrets via variables d’environnement chiffrables (stub dev-mode).
+- Sandbox runner isolé avec timeouts + limites ressources.
+- Logs d’usage tamper-evident (chaîne SHA256).
+- Quotas per-agent per-tool + pénalité réputation.

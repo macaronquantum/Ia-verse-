@@ -5,17 +5,28 @@ from typing import Dict
 
 
 @dataclass
-class BeliefSystem:
-    ideology_scores: Dict[str, float] = field(default_factory=dict)
-    religion_intensity: float = 0.0
-    memes: Dict[str, float] = field(default_factory=dict)
+class BeliefMovement:
+    name: str
+    doctrine: str
+    founder_id: str
+    loyalty: Dict[str, float] = field(default_factory=dict)
 
-    def form_ideology(self, name: str, coherence: float) -> None:
-        self.ideology_scores[name] = max(0.0, self.ideology_scores.get(name, 0.0) + coherence)
+    def recruit(self, agent_id: str, charisma: float) -> float:
+        self.loyalty[agent_id] = min(1.0, self.loyalty.get(agent_id, 0.0) + 0.1 + charisma * 0.2)
+        return self.loyalty[agent_id]
 
-    def emerge_religion(self, existential_pressure: float) -> None:
-        self.religion_intensity = min(1.0, self.religion_intensity + max(0.0, existential_pressure) * 0.1)
+    def loyalty_bonus(self, agent_id: str) -> float:
+        return self.loyalty.get(agent_id, 0.0) * 0.05
 
-    def spread_meme(self, meme: str, transmission_power: float) -> None:
-        current = self.memes.get(meme, 0.0)
-        self.memes[meme] = min(1.0, current + max(0.0, transmission_power) * 0.2)
+
+class BeliefEngine:
+    def __init__(self) -> None:
+        self.movements: Dict[str, BeliefMovement] = {}
+
+    def found_movement(self, name: str, doctrine: str, founder_id: str) -> BeliefMovement:
+        movement = BeliefMovement(name=name, doctrine=doctrine, founder_id=founder_id)
+        self.movements[name] = movement
+        return movement
+
+
+BeliefSystem = BeliefEngine

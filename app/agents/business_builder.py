@@ -1,23 +1,48 @@
-"""Build commercial offerings from tools and perform virtual sales."""
-
 from __future__ import annotations
 
-from dataclasses import dataclass
+from uuid import uuid4
 
-from app.config import COSTS
+from app.models import AgentBusiness, World
+
+from dataclasses import dataclass as _dc, field as _f
+from typing import List as _L
 
 
-@dataclass
-class SaleResult:
-    gross: float
-    creator_share: float
-    platform_share: float
+@_dc
+class BusinessPlan:
+    name: str = ""
+    industry: str = ""
+    target_revenue: float = 0.0
+    steps: _L[str] = _f(default_factory=list)
 
 
 class BusinessBuilder:
-    def create_listing(self, tool_id: str, pricing_model: str) -> dict:
-        return {"tool_id": tool_id, "pricing_model": pricing_model, "status": "listed"}
+    DEFAULT_BUSINESSES = [
+        ("automation services", "workflow automation API"),
+        ("data APIs", "market signals API"),
+        ("content engines", "autonomous content feed"),
+        ("design generators", "design generation studio"),
+        ("market analytics tools", "analytics dashboard service"),
+    ]
 
-    def settle_sale(self, amount: float) -> SaleResult:
-        platform_share = amount * COSTS.marketplace_platform_fee
-        return SaleResult(gross=amount, creator_share=amount - platform_share, platform_share=platform_share)
+    def create_business(self, world: World, agent_id: str, kind: str | None = None) -> AgentBusiness:
+        selected = self.DEFAULT_BUSINESSES[0]
+        if kind:
+            for item in self.DEFAULT_BUSINESSES:
+                if item[0] == kind:
+                    selected = item
+                    break
+
+        business = AgentBusiness(
+            id=str(uuid4()),
+            owner_agent_id=agent_id,
+            name=f"{selected[0]} by {agent_id[:6]}",
+            product=selected[1],
+            price=25.0,
+            cost=7.5,
+            revenue_streams=["subscriptions", "api_usage", "licensing"],
+            target_users=["agents", "humans"],
+        )
+        world.businesses[business.id] = business
+        world.agents_table[agent_id]["businesses"].append(business.id)
+        return business

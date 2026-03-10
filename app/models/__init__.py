@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
+
+from app.models.tool_manifest import ToolManifest
 
 
 class Resource(str, Enum):
@@ -53,7 +56,7 @@ class Bank:
     accounts: Dict[str, Account] = field(default_factory=dict)
     loans: Dict[str, Loan] = field(default_factory=dict)
     reserve: float = 100000.0
-    base_interest_rate: float = 2.0
+    base_interest_rate: float = 0.02
 
     def ensure_account(self, owner_id: str) -> Account:
         if owner_id not in self.accounts:
@@ -116,8 +119,7 @@ class Bank:
 
     def apply_interest(self) -> None:
         for loan in self.loans.values():
-            per_tick_rate = loan.interest_rate / 10000.0
-            loan.remaining *= 1 + per_tick_rate
+            loan.remaining *= 1 + loan.interest_rate
 
 
 @dataclass
@@ -148,3 +150,94 @@ class World:
 
     def log(self, message: str) -> None:
         self.event_log.append(f"[tick {self.tick_count}] {message}")
+
+
+@dataclass
+class AgentGoal:
+    id: str = field(default_factory=lambda: str(uuid4()))
+    agent_id: str = ""
+    description: str = ""
+    priority: float = 1.0
+    status: str = "active"
+    created_tick: int = 0
+    completed_tick: Optional[int] = None
+
+
+@dataclass
+class AgentTask:
+    id: str = field(default_factory=lambda: str(uuid4()))
+    goal_id: str = ""
+    agent_id: str = ""
+    description: str = ""
+    status: str = "pending"
+    result: Optional[str] = None
+
+
+@dataclass
+class AgentMemoryRecord:
+    id: str = field(default_factory=lambda: str(uuid4()))
+    agent_id: str = ""
+    kind: str = ""
+    content: str = ""
+    tick: int = 0
+    timestamp: datetime = field(default_factory=datetime.utcnow)
+
+
+@dataclass
+class AgentTransaction:
+    id: str = field(default_factory=lambda: str(uuid4()))
+    agent_id: str = ""
+    counterparty_id: str = ""
+    amount: float = 0.0
+    kind: str = ""
+    tick: int = 0
+
+
+@dataclass
+class AgentBusiness:
+    id: str = field(default_factory=lambda: str(uuid4()))
+    owner_agent_id: str = ""
+    name: str = ""
+    industry: str = ""
+    revenue: float = 0.0
+    expenses: float = 0.0
+    employees: List[str] = field(default_factory=list)
+
+
+class AgentTier(str, Enum):
+    WORKER = "worker"
+    BUSINESS = "business"
+    BANK = "bank"
+    CENTRAL_BANK = "central_bank"
+
+
+@dataclass
+class AgentFinances:
+    currency_balances: Dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
+class AgentState:
+    id: str
+    name: str
+    tier: AgentTier = AgentTier.WORKER
+    core_energy: float = 10.0
+    alive: bool = True
+    finances: AgentFinances = field(default_factory=AgentFinances)
+
+
+@dataclass
+class Action:
+    actor_id: str
+    action_type: str
+    payload: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class AgentMessage:
+    id: str = field(default_factory=lambda: str(uuid4()))
+    sender_id: str = ""
+    receiver_id: str = ""
+    content: str = ""
+    tick: int = 0
+    read: bool = False

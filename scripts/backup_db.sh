@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
-echo "Database backup placeholder (configure pg_dump in production)."
+mkdir -p backups
+docker exec ia-verse-postgres pg_dump -U iaverse ia_verse > "backups/ia_verse_$(date +%Y%m%d_%H%M%S).sql"

@@ -2,23 +2,33 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Header, HTTPException
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from app.api.monitoring import router as monitoring_router
+from app.api_gateway.gateway import gateway_router
 from app.simulation import WorldEngine
 
 
 app = FastAPI(title="IA-Verse Backend", version="1.0.0")
+app.include_router(monitoring_router)
+app.include_router(gateway_router)
 engine = WorldEngine()
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "web" / "dashboard"
+DASHBOARD_PAGE = STATIC_DIR / "index.html"
 
 
 @app.get("/", include_in_schema=False)
-def serve_index():
-    return FileResponse(STATIC_DIR / "index.html")
+def root():
+    return RedirectResponse(url="/dashboard", status_code=307)
+
+
+@app.get("/dashboard", include_in_schema=False)
+def dashboard():
+    return FileResponse(DASHBOARD_PAGE)
 
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

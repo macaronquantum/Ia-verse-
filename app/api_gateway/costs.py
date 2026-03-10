@@ -6,6 +6,30 @@ from dataclasses import dataclass
 from hashlib import sha256
 from time import time
 
+from pydantic import BaseModel
+
+
+class CostUpdate(BaseModel):
+    key: str
+    value: float
+
+
+class CostCatalog:
+    def __init__(self) -> None:
+        self._costs: dict[str, float] = {
+            "tool_call_base": 0.5,
+            "tool_sandbox_second": 0.02,
+        }
+
+    def get(self, key: str, default: float = 0.0) -> float:
+        return self._costs.get(key, default)
+
+    def update(self, key: str, value: float) -> None:
+        self._costs[key] = value
+
+    def all(self) -> dict[str, float]:
+        return dict(self._costs)
+
 
 @dataclass
 class LedgerEntry:
@@ -16,6 +40,11 @@ class LedgerEntry:
     ts: float
     prev_hash: str
     hash: str
+
+
+def estimate_cost(model: str, tokens: int) -> float:
+    cost_per_k = {"local": 0.001, "openai": 0.03, "anthropic": 0.04}
+    return cost_per_k.get(model, 0.01) * (tokens / 1000)
 
 
 class BillingLedger:

@@ -3,6 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List
 
+from app.agents.personality import Personality
+from app.agents.tools.deception_stub import deception_plan
+from app.memory.store import STORE
+
 from app.culture.beliefs import BeliefSystem
 from app.models import Agent, Resource, World
 from app.social.messaging import CommunicationHub
@@ -26,6 +30,41 @@ class AgentMindState:
     last_outcome: Dict[str, float] = field(default_factory=dict)
 
 
+
+
+def _normalize(values: list[float]) -> list[float]:
+    total = sum(max(0.0, v) for v in values)
+    if total <= 0:
+        return [0.0 for _ in values]
+    return [max(0.0, v) / total for v in values]
+
+
+def decision_weighting(
+    instruction: dict[str, float],
+    personality: Personality,
+    survival_estimate: float,
+    expected_profit: float,
+    social_value: float = 0.2,
+) -> dict[str, float]:
+    """Compute owner-vs-self weighting and normalized action scores."""
+    weight_owner = personality.obedience * (1 - personality.risk)
+    weight_self = (1 - personality.obedience) * (personality.greed + personality.risk)
+    ideology_modifiers = {
+        "capitalist": 1.1,
+        "cooperative": 0.9,
+        "anarchist": 1.05,
+        "pirate": 1.1,
+        "bureaucrat": 0.95,
+    }
+    weight_self *= ideology_modifiers.get(personality.ideology, 1.0)
+    scores = _normalize([weight_owner * instruction.get("value", 0.0), weight_self * expected_profit, personality.cooperation * social_value])
+    return {
+        "owner": scores[0],
+        "self": scores[1],
+        "social": scores[2],
+        "survival_estimate": survival_estimate,
+    }
+
 class AgentMind:
     def __init__(self, agent: Agent, confidence: float = 0.65) -> None:
         self.agent = agent
@@ -37,6 +76,7 @@ class AgentMind:
         self.dependency_graph = DependencyGraph()
         self.messaging = CommunicationHub(self.trust_graph, self.influence_graph, self.dependency_graph)
         self.budget = CognitiveBudget()
+        self.personality = Personality()
 
     def run_cycle(self, world: World, global_state: GlobalState) -> List[Dict[str, object]]:
         perceived = self.perceive_world(global_state)
@@ -120,7 +160,15 @@ class AgentMind:
     def decide_actions(self, plan: Dict[str, object]) -> List[Dict[str, object]]:
         actions: List[Dict[str, object]] = []
         for task in plan.get("tasks", []):
-            actions.append({"task": task, "action": self._action_for_task(task)})
+            action = self._action_for_task(task)
+            weight = decision_weighting({"value": 1.0}, self.personality, 0.5, expected_profit=0.4, social_value=0.3)
+            chosen = action
+            if weight["self"] > weight["owner"] and task == "secure_liquidity":
+                chosen = "trade_for_energy"
+            actions.append({"task": task, "action": chosen, "reasoning": weight})
+            STORE.log_tamper_event({"kind": "decision_trace", "agent_id": self.agent.id, "task": task, "weights": weight})
+            if self.personality.manipulativeness > 0.6 and chosen in {"build_alliance", "shape_narrative"}:
+                deception_plan(self.agent.id, "attempt to spoof proof for alliance bribe")
 
         if self.budget.llm_tokens < 30:
             actions = actions[:1]

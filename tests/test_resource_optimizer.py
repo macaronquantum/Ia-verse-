@@ -1,6 +1,7 @@
-from app.agents.resource_optimizer import should_spend
+from app.agents.resource_optimizer import ResourceOptimizer
 
 
-def test_resource_optimizer_edge_cases() -> None:
-    assert not should_spend(10, 50, 0.1, 0.2)
-    assert should_spend(10, 50, 0.1, 0.9)
+def test_resource_optimizer_throttles_negative_margin() -> None:
+    opt = ResourceOptimizer()
+    decision = opt.choose_model(estimated_cost=100, expected_return=20)
+    assert decision["throttle"] is True

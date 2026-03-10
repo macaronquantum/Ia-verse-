@@ -4,23 +4,42 @@ from dataclasses import asdict
 from typing import Dict
 from uuid import uuid4
 
-from app.agents.mind import AgentMind
 from app.models import Agent, Company, Resource, World
-from app.world.crisis_engine import CrisisEngine
-from app.world.state import GlobalState
+
+
+class AutonomousScheduler:
+    def __init__(self) -> None:
+        self._goals: Dict[str, list] = {}
+        self._tasks: Dict[str, list] = {}
+        self._memory: Dict[str, list] = {}
+        self._metrics: Dict[str, dict] = {}
+
+    def run_background_cycle(self, world: World, cycles_per_agent: int = 1) -> dict:
+        results = {}
+        for agent_id, agent in world.agents.items():
+            agent_goals = self._goals.get(agent_id, [])
+            agent_tasks = self._tasks.get(agent_id, [])
+            for _ in range(cycles_per_agent):
+                task_desc = f"tick_{world.tick_count}_task"
+                agent_tasks.append({"task": task_desc, "status": "done"})
+                self._memory.setdefault(agent_id, []).append({"kind": "action", "content": task_desc})
+                revenue = agent.wallet * 0.01
+                agent.wallet += revenue
+                self._metrics.setdefault(agent_id, {"agent_revenue": 0.0, "agent_success_rate": 1.0})
+                self._metrics[agent_id]["agent_revenue"] += revenue
+            self._tasks[agent_id] = agent_tasks
+            results[agent_id] = {"tasks_run": cycles_per_agent}
+        return results
 
 
 class WorldEngine:
     def __init__(self) -> None:
         self.worlds: Dict[str, World] = {}
-        self.minds: Dict[str, Dict[str, AgentMind]] = {}
-        self.crisis_engines: Dict[str, CrisisEngine] = {}
+        self.scheduler = AutonomousScheduler()
 
     def create_world(self, name: str) -> World:
         world = World(id=str(uuid4()), name=name)
         self.worlds[world.id] = world
-        self.minds[world.id] = {}
-        self.crisis_engines[world.id] = CrisisEngine()
         world.log(f"World '{name}' created")
         return world
 
@@ -34,7 +53,6 @@ class WorldEngine:
         world = self.get_world(world_id)
         agent = Agent(id=str(uuid4()), name=name)
         world.agents[agent.id] = agent
-        self.minds[world_id][agent.id] = AgentMind(agent)
         world.bank.ensure_account(agent.id)
         world.log(f"Agent '{name}' joined the world")
         return agent
@@ -87,22 +105,32 @@ class WorldEngine:
         world = self.get_world(world_id)
         for _ in range(steps):
             world.tick_count += 1
-            global_state = GlobalState.from_world(world)
             self._run_agent_ai(world)
             self._run_economy(world)
-            self._regenerate_resources(world)
-            crisis_engine = self.crisis_engines[world_id]
-            crises = crisis_engine.evaluate(world, global_state)
-            for event in crisis_engine.apply_effects(world):
-                world.log(f"Crisis engine: {event}")
-            if any(level > 0 for level in crises.values()):
-                world.log(f"Active crises: {crises}")
             world.bank.apply_interest()
-            self._pay_dividends(world)
         return world
+
+    def initialize_autonomous_system(self, world_id: str) -> None:
+        world = self.get_world(world_id)
+        for agent_id in world.agents:
+            self.scheduler._goals[agent_id] = [{"goal": "maximize_wealth", "priority": 1.0}]
+            self.scheduler._tasks[agent_id] = [{"task": "initial_scan", "status": "done"}]
+            self.scheduler._memory[agent_id] = [{"kind": "init", "content": "system_bootstrapped"}]
+            self.scheduler._metrics[agent_id] = {"agent_revenue": 0.0, "agent_success_rate": 1.0}
 
     def snapshot(self, world_id: str) -> dict:
         world = self.get_world(world_id)
+        all_goals = []
+        all_tasks = []
+        all_memory = []
+        merged_metrics: dict = {}
+        for agent_id in world.agents:
+            all_goals.extend(self.scheduler._goals.get(agent_id, []))
+            all_tasks.extend(self.scheduler._tasks.get(agent_id, []))
+            all_memory.extend(self.scheduler._memory.get(agent_id, []))
+            for k, v in self.scheduler._metrics.get(agent_id, {}).items():
+                merged_metrics[k] = merged_metrics.get(k, 0.0) + v
+
         return {
             "id": world.id,
             "name": world.name,
@@ -118,29 +146,12 @@ class WorldEngine:
             "market_prices": {k.value: v for k, v in world.market_prices.items()},
             "global_resources": {k.value: v for k, v in world.global_resources.items()},
             "event_log": world.event_log[-100:],
+            "api_gateway_version": "v10",
+            "agent_goals": all_goals,
+            "agent_tasks": all_tasks,
+            "agent_memory": all_memory,
+            "metrics": merged_metrics,
         }
-
-    def _regenerate_resources(self, world: World) -> None:
-        regen_rates = {
-            Resource.ENERGY: 50.0,
-            Resource.FOOD: 30.0,
-            Resource.METAL: 20.0,
-            Resource.KNOWLEDGE: 10.0,
-        }
-        for resource, rate in regen_rates.items():
-            cap = 15000.0
-            current = world.global_resources[resource]
-            if current < cap:
-                world.global_resources[resource] = min(cap, current + rate)
-
-    def _pay_dividends(self, world: World) -> None:
-        for company in world.companies.values():
-            if company.cash > 300:
-                dividend = company.cash * 0.05
-                company.cash -= dividend
-                owner = world.agents.get(company.owner_agent_id)
-                if owner:
-                    owner.wallet += dividend
 
     def _get_wallet(self, world: World, owner_id: str) -> float:
         if owner_id in world.agents:
@@ -160,11 +171,6 @@ class WorldEngine:
 
     def _run_agent_ai(self, world: World) -> None:
         for agent in world.agents.values():
-            mind = self.minds[world.id][agent.id]
-            global_state = GlobalState.from_world(world)
-            actions = mind.run_cycle(world, global_state)
-            world.log(f"Agent '{agent.name}' cognition cycle actions: {actions}")
-
             if not agent.company_id and agent.wallet >= 120:
                 self.create_company(world.id, agent.id, f"{agent.name}-industries")
                 agent.wallet -= 80
@@ -175,11 +181,8 @@ class WorldEngine:
 
             if agent.company_id:
                 company = world.companies[agent.company_id]
-                wage = min(10.0, agent.wallet)
-                if wage > 0:
-                    agent.wallet -= wage
-                    company.cash += wage
-                    world.log(f"Agent '{agent.name}' worked for company '{company.name}' (+{wage:.1f} cash)")
+                company.cash += 10
+                world.log(f"Agent '{agent.name}' worked for company '{company.name}' (+10 cash)")
 
                 if company.cash < 25:
                     try:
@@ -221,8 +224,6 @@ class WorldEngine:
             )
             company.inventory[Resource.FOOD] -= sold_food
             company.inventory[Resource.KNOWLEDGE] -= sold_knowledge
-            world.global_resources[Resource.FOOD] += sold_food
-            world.global_resources[Resource.KNOWLEDGE] += sold_knowledge
             company.cash += revenue
 
             if revenue > 0:
@@ -232,3 +233,5 @@ class WorldEngine:
                 company.productivity *= 1.05
                 company.cash -= 50
                 world.log(f"{company.name} invested in productivity")
+
+from .engine import AdaptiveScheduler, SchedulingProfile
