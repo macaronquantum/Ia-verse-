@@ -1,0 +1,284 @@
+You are working on an existing multi-agent economic simulation project.  
+The backend already exists and runs a simulation of AI agents (central banks, banks, companies, states, judges, etc.).  
+Agents act every few seconds and produce logs, decisions, and economic transactions.
+
+Your task is to design and implement a high-end interactive frontend dashboard connected to the backend APIs.
+
+The goal is to create something that feels like a living virtual world simulation of AI agents.
+
+-----------------------------
+
+GENERAL FRONTEND GOAL
+
+Build a modern interactive simulation interface that allows the user to:
+
+• visualize the world economy simulation in real time  
+• explore agents and their behavior  
+• see economic events unfold live  
+• inspect detailed logs and decisions of every agent  
+
+The UI must look premium, futuristic, and immersive.
+
+-----------------------------
+
+VISUAL STYLE
+
+Design style inspiration:
+
+• liquid glass / frosted glass UI  
+• soft reflections  
+• futuristic but elegant  
+• subtle depth and 3D elements  
+• smooth animations
+
+Think:
+
+• Apple visionOS style UI  
+• sci-fi control room  
+• elegant AI simulation dashboard
+
+Use:
+
+• glassmorphism
+• smooth transitions
+• animated data
+• glowing highlights
+
+Avoid simple dashboards.
+
+-----------------------------
+
+MAIN VIEW: 3D WORLD MAP
+
+The main screen must show a 3D interactive globe or world map.
+
+Use a library such as:
+
+• Three.js
+• react-three-fiber
+• Mapbox GL
+• Globe.gl
+
+On the map visualize:
+
+AGENTS
+
+Each agent appears as an object on the map.
+
+Types include:
+
+• central banks  
+• banks  
+• companies  
+• states  
+• judges  
+• energy provider
+
+Each agent should have:
+
+• position (country based)
+• icon or symbol
+• size proportional to wealth or power
+• color based on type
+
+Examples:
+
+Central banks → glowing spheres  
+Banks → cubes  
+Companies → nodes  
+States → shields  
+Judges → scales symbol  
+
+Agent size scales with:
+
+wealth
+influence
+energy ownership
+
+-----------------------------
+
+REAL-TIME ECONOMIC EVENTS
+
+The simulation produces events.
+
+Display them visually on the map:
+
+• money transfers (lines between agents)
+• trade flows
+• disputes
+• legal actions
+• taxes
+
+Animate flows with glowing lines between nodes.
+
+-----------------------------
+
+LIVE SIMULATION FEED
+
+Add a live narrative panel.
+
+Every ~30 seconds show a short textual summary such as:
+
+"European Central Bank increased EnergyCore price"
+
+"Bank Alpha acquired energy credits from Asia region"
+
+"Company Delta expanded into Brazil"
+
+"Judge agent initiated investigation on Bank Beta"
+
+This should feel like a news feed of the simulated world.
+
+-----------------------------
+
+AGENT EXPLORER
+
+Create a side panel or separate page where the user can explore agents.
+
+Features:
+
+Filter agents by category:
+
+• central banks
+• banks
+• companies
+• states
+• judges
+
+For each agent show:
+
+• name
+• type
+• wealth
+• energy owned
+• country
+• influence score
+• risk score
+• ideology/personality
+
+Allow sorting by:
+
+• wealth
+• growth
+• influence
+• activity
+
+Clicking an agent should open a detailed agent profile.
+
+-----------------------------
+
+AGENT PROFILE PAGE
+
+This page should display:
+
+Agent identity and stats
+
+Charts showing:
+
+• wealth over time
+• transactions
+• energy usage
+• influence
+
+Also show:
+
+Full logs of decisions.
+
+Example logs:
+
+"Tick 120: decided to increase energy purchases"
+
+"Tick 121: negotiated with Bank Omega"
+
+"Tick 122: initiated market speculation strategy"
+
+Logs must be scrollable and filterable.
+
+-----------------------------
+
+GLOBAL ECONOMY DASHBOARD
+
+Add a page showing global metrics:
+
+• total money supply
+• total energy
+• richest agents
+• most active agents
+• agent population
+• bankrupt agents
+• Gini inequality index
+• concentration indexes
+
+Visualize with animated charts.
+
+-----------------------------
+
+SIMULATION CONTROL PANEL
+
+Allow the user to control the simulation:
+
+• start
+• pause
+• change speed
+• spawn agents
+• toggle chaos mode
+• adjust economic parameters
+
+-----------------------------
+
+VISUAL POLISH
+
+Add subtle visual elements:
+
+• glowing network lines between agents
+• animated economic flows
+• pulsing nodes
+• smooth camera transitions on the globe
+• hover tooltips
+
+The interface should feel like observing a living AI civilization.
+
+-----------------------------
+
+TECHNICAL REQUIREMENTS
+
+Use modern frontend stack:
+
+• React
+• Three.js or react-three-fiber
+• Tailwind or modern CSS
+• WebSockets or polling to fetch simulation updates
+• modular component structure
+
+Backend already exposes APIs.
+
+Connect frontend to backend endpoints for:
+
+• simulation state
+• agents list
+• agent logs
+• global metrics
+• event feed
+
+-----------------------------
+
+DELIVERABLES
+
+Implement:
+
+• full frontend structure
+• main 3D world view
+• agent explorer
+• agent profile pages
+• economy dashboard
+• live event feed
+• simulation control panel
+
+Make the UI feel like a high-end AI simulation control room.
+
+Also propose additional features that would make the simulation more immersive or insightful.
+
+-----------------------------
+
+Goal:  
+Create the most compelling and visually impressive interface possible for exploring an evolving AI-driven economic world.

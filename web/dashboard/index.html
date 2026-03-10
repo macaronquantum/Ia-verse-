@@ -1,19 +1,157 @@
-<!doctype html>
-<html>
-<head><meta charset="utf-8"><title>LA-Verse Dashboard</title></head>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IA-Verse | AI Civilization</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
 <body>
-<h1>LA-Verse Dashboard</h1>
-<div id="metrics"></div>
-<pre id="events"></pre>
-<script>
-async function load(){
-  const m=await fetch('/monitoring/metrics').then(r=>r.json());
-  const w=await fetch('/monitoring/world_map').then(r=>r.json());
-  document.getElementById('metrics').innerText=JSON.stringify({metrics:m,world_map:w},null,2);
-}
-load();
-const ws = new WebSocket(`ws://${location.host}/monitoring/events`);
-ws.onmessage = (e)=>{document.getElementById('events').textContent += e.data+'\n';};
-</script>
+    <div id="app">
+        <nav id="navbar">
+            <div class="nav-brand">
+                <div class="logo-pulse"></div>
+                <span class="brand-text">IA-VERSE</span>
+            </div>
+            <div class="nav-links">
+                <button class="nav-btn active" data-view="globe" onclick="switchView('globe')">
+                    <span class="nav-icon">&#127758;</span><span class="nav-label">Globe</span>
+                </button>
+                <button class="nav-btn" data-view="agents" onclick="switchView('agents')">
+                    <span class="nav-icon">&#128100;</span><span class="nav-label">Agents</span>
+                </button>
+                <button class="nav-btn" data-view="economy" onclick="switchView('economy')">
+                    <span class="nav-icon">&#128200;</span><span class="nav-label">Economy</span>
+                </button>
+                <button class="nav-btn" data-view="controls" onclick="switchView('controls')">
+                    <span class="nav-icon">&#9881;</span><span class="nav-label">Controls</span>
+                </button>
+            </div>
+            <div class="nav-status">
+                <span id="status-indicator" class="status-dot offline"></span>
+                <span id="status-text">Offline</span>
+                <span id="tick-display" class="tick-badge">Tick 0</span>
+            </div>
+        </nav>
+
+        <div id="view-globe" class="view active">
+            <div id="globe-container"></div>
+            <div id="globe-overlay">
+                <div class="glass-panel mini-stats" id="mini-stats">
+                    <div class="mini-stat"><span class="mini-label">Agents</span><span class="mini-value" id="stat-agents">0</span></div>
+                    <div class="mini-stat"><span class="mini-label">Companies</span><span class="mini-value" id="stat-companies">0</span></div>
+                    <div class="mini-stat"><span class="mini-label">Money</span><span class="mini-value" id="stat-money">$0</span></div>
+                    <div class="mini-stat"><span class="mini-label">Tick</span><span class="mini-value" id="stat-tick">0</span></div>
+                </div>
+                <div class="glass-panel live-feed" id="live-feed-panel">
+                    <h3 class="panel-title">Live AI Feed</h3>
+                    <div id="feed-items" class="feed-scroll"></div>
+                </div>
+            </div>
+            <div id="agent-tooltip" class="tooltip hidden"></div>
+        </div>
+
+        <div id="view-agents" class="view">
+            <div class="agents-layout">
+                <div class="glass-panel agents-sidebar">
+                    <h2>Agent Explorer</h2>
+                    <div class="filter-bar">
+                        <input type="text" id="agent-search" placeholder="Search agents..." class="glass-input" oninput="filterAgents()">
+                        <select id="agent-type-filter" class="glass-select" onchange="filterAgents()">
+                            <option value="all">All Types</option>
+                            <option value="central_bank">Central Banks</option>
+                            <option value="bank">Banks</option>
+                            <option value="company">Companies</option>
+                            <option value="state">States</option>
+                            <option value="judge">Judges</option>
+                            <option value="energy_provider">Energy</option>
+                            <option value="trader">Traders</option>
+                            <option value="citizen">Citizens</option>
+                        </select>
+                        <select id="agent-sort" class="glass-select" onchange="filterAgents()">
+                            <option value="wallet">Wealth</option>
+                            <option value="influence">Influence</option>
+                            <option value="risk">Risk</option>
+                            <option value="name">Name</option>
+                        </select>
+                    </div>
+                    <div id="agents-list" class="agents-scroll"></div>
+                </div>
+                <div class="glass-panel agent-detail" id="agent-detail">
+                    <div id="agent-profile-content">
+                        <div class="empty-state"><span class="empty-state-icon">&#128100;</span><p>Select an agent to view profile</p></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-economy" class="view">
+            <div class="economy-grid">
+                <div class="glass-panel stat-card accent-blue"><span class="stat-label">Total Money Supply</span><span class="stat-value" id="eco-money">$0</span></div>
+                <div class="glass-panel stat-card accent-yellow"><span class="stat-label">Total Energy</span><span class="stat-value" id="eco-energy">0</span></div>
+                <div class="glass-panel stat-card accent-purple"><span class="stat-label">Gini Index</span><span class="stat-value" id="eco-gini">0.00</span><div class="stat-bar"><div class="stat-bar-fill" id="gini-bar"></div></div></div>
+                <div class="glass-panel stat-card accent-green"><span class="stat-label">Agents</span><span class="stat-value" id="eco-agents">0</span></div>
+                <div class="glass-panel stat-card accent-green"><span class="stat-label">Companies</span><span class="stat-value" id="eco-companies">0</span></div>
+                <div class="glass-panel stat-card accent-red"><span class="stat-label">Bankrupt</span><span class="stat-value" id="eco-bankrupt">0</span></div>
+                <div class="glass-panel stat-card accent-blue"><span class="stat-label">Bank Reserve</span><span class="stat-value" id="eco-reserve">$0</span></div>
+                <div class="glass-panel stat-card accent-orange"><span class="stat-label">Active Loans</span><span class="stat-value" id="eco-loans">0</span></div>
+                <div class="glass-panel market-panel"><h3 class="panel-title">Market Prices</h3><div id="prices-grid" class="price-grid"></div></div>
+                <div class="glass-panel leaderboard-panel"><h3 class="panel-title">Leaderboard</h3><div id="leaderboard" class="leaderboard-scroll"></div></div>
+                <div class="glass-panel resources-panel"><h3 class="panel-title">Global Resources</h3><div id="resources-bars"></div></div>
+            </div>
+        </div>
+
+        <div id="view-controls" class="view">
+            <div class="controls-layout">
+                <div class="glass-panel control-main">
+                    <h2>Simulation Control</h2>
+                    <div class="control-section">
+                        <h3 class="section-title">World Setup</h3>
+                        <div class="control-row">
+                            <label>Agents:</label>
+                            <input type="range" id="agent-count-slider" min="4" max="16" value="8" class="glass-slider" oninput="document.getElementById('agent-count-val').textContent=this.value">
+                            <span id="agent-count-val" class="slider-val">8</span>
+                        </div>
+                        <button class="btn btn-create" onclick="createWorld()">Create World + Agents</button>
+                    </div>
+                    <div class="control-section">
+                        <h3 class="section-title">Simulation</h3>
+                        <div class="btn-row">
+                            <button class="btn btn-success" onclick="startSim()">&#9654; Start</button>
+                            <button class="btn btn-warning" onclick="pauseSim()">&#9208; Pause</button>
+                            <button class="btn btn-tick" onclick="manualTick()">&#9197; Step</button>
+                        </div>
+                        <div class="control-row">
+                            <label>Speed:</label>
+                            <input type="range" id="speed-slider" min="3" max="30" value="8" class="glass-slider" oninput="document.getElementById('speed-val').textContent=this.value+'s'; setSpeed(this.value)">
+                            <span id="speed-val" class="slider-val">8s</span>
+                        </div>
+                    </div>
+                    <div class="control-section">
+                        <h3 class="section-title">Spawn Agent</h3>
+                        <div class="control-row">
+                            <input type="text" id="new-agent-name" placeholder="Agent name..." class="glass-input flex-grow">
+                            <button class="btn btn-agent" onclick="spawnAgent()">+ Add</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="glass-panel event-log-main">
+                    <h2>Event Log</h2>
+                    <div id="event-log" class="log-scroll"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+        <div class="orb orb-4"></div>
+    </div>
+    <div class="grid-overlay"></div>
+
+    <script src="/static/app.js"></script>
 </body>
 </html>

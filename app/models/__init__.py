@@ -31,6 +31,48 @@ class Account:
     balance: float = 0.0
 
 
+AGENT_TYPES = ["central_bank", "bank", "company", "state", "judge", "energy_provider", "trader", "citizen"]
+
+COUNTRIES = [
+    "United States", "United Kingdom", "Germany", "France", "Japan", "China",
+    "Brazil", "India", "Australia", "Canada", "Switzerland", "Singapore",
+    "South Korea", "South Africa", "Mexico", "Russia", "Italy", "Spain",
+    "Netherlands", "Sweden", "Norway", "UAE", "Saudi Arabia", "Nigeria",
+]
+
+COUNTRY_COORDS = {
+    "United States": (38.0, -97.0), "United Kingdom": (51.5, -0.1), "Germany": (51.2, 10.4),
+    "France": (46.6, 2.2), "Japan": (36.2, 138.3), "China": (35.9, 104.2),
+    "Brazil": (-14.2, -51.9), "India": (20.6, 79.0), "Australia": (-25.3, 133.8),
+    "Canada": (56.1, -106.3), "Switzerland": (46.8, 8.2), "Singapore": (1.4, 103.8),
+    "South Korea": (35.9, 127.8), "South Africa": (-30.6, 22.9), "Mexico": (23.6, -102.6),
+    "Russia": (61.5, 105.3), "Italy": (41.9, 12.6), "Spain": (40.5, -3.7),
+    "Netherlands": (52.1, 5.3), "Sweden": (60.1, 18.6), "Norway": (60.5, 8.5),
+    "UAE": (23.4, 53.8), "Saudi Arabia": (23.9, 45.1), "Nigeria": (9.1, 8.7),
+}
+
+
+def _assign_agent_type(name: str) -> str:
+    import random
+    n = name.lower()
+    if "bank" in n and "central" in n:
+        return "central_bank"
+    if "bank" in n:
+        return "bank"
+    if "judge" in n or "justice" in n:
+        return "judge"
+    if "state" in n or "gov" in n:
+        return "state"
+    if "energy" in n or "power" in n:
+        return "energy_provider"
+    return random.choice(["trader", "company", "citizen", "bank"])
+
+
+def _assign_country() -> str:
+    import random
+    return random.choice(COUNTRIES)
+
+
 @dataclass
 class Agent:
     id: str
@@ -38,6 +80,22 @@ class Agent:
     wallet: float = 100.0
     inventory: Dict[Resource, float] = field(default_factory=lambda: {r: 10.0 for r in Resource})
     company_id: Optional[str] = None
+    agent_type: str = ""
+    country: str = ""
+    influence_score: float = 0.0
+    risk_score: float = 0.0
+    personality: str = ""
+    wealth_history: List[float] = field(default_factory=list)
+    decision_log: List[str] = field(default_factory=list)
+
+    def __post_init__(self):
+        if not self.agent_type:
+            self.agent_type = _assign_agent_type(self.name)
+        if not self.country:
+            self.country = _assign_country()
+        if not self.personality:
+            import random
+            self.personality = random.choice(["aggressive", "conservative", "balanced", "speculative", "cautious"])
 
 
 @dataclass

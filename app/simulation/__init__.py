@@ -239,6 +239,16 @@ class WorldEngine:
                     company.cash += 10
                     world.log(f"{agent.name} worked for {company.name} (+10 cash) [fallback]")
 
+            agent.wealth_history.append(round(agent.wallet, 2))
+            if len(agent.wealth_history) > 100:
+                agent.wealth_history = agent.wealth_history[-100:]
+            agent.decision_log.append(f"[tick {world.tick_count}] {action}: {reasoning}")
+            if len(agent.decision_log) > 200:
+                agent.decision_log = agent.decision_log[-200:]
+            total_assets = agent.wallet + sum(agent.inventory.get(r, 0) * world.market_prices.get(r, 0) for r in Resource)
+            agent.influence_score = round(min(total_assets / 50, 100), 1)
+            agent.risk_score = round(max(0, 50 - agent.wallet) / 50 * 100, 1) if agent.wallet < 50 else 0.0
+
     def _execute_agent_action(self, world: World, agent, company, action: str, reasoning: str, amount: float, resource_key, prices: dict) -> None:
         if action == "buy_resource" and agent.wallet >= amount * prices.get(resource_key.value, 5):
             cost = amount * world.market_prices[resource_key]
