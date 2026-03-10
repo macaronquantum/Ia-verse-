@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.api.monitoring import router as monitoring_router
 from app.api_gateway.gateway import gateway_router
-from app.models import COUNTRY_COORDS, Resource
+from app.models import COUNTRY_COORDS, COUNTRIES, Resource
 from app.simulation import WorldEngine
 
 
@@ -26,8 +26,9 @@ app.include_router(gateway_router)
 engine = WorldEngine()
 
 _auto_sim_task: Optional[asyncio.Task] = None
-_auto_sim_speed: float = 5.0
+_auto_sim_speed: float = 5.0  # seconds between ticks
 _auto_sim_running: bool = False
+_auto_sim_stopped: bool = False
 _active_world_id: Optional[str] = None
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "web" / "dashboard"
@@ -162,7 +163,7 @@ def repay(world_id: str, payload: RepayRequest) -> dict:
 @app.get("/api/simulation/state")
 def get_simulation_state() -> dict:
     global _active_world_id
-    if not engine.worlds:
+    if _auto_sim_stopped or not engine.worlds:
         return {"active": False, "world": None}
     if _active_world_id and _active_world_id in engine.worlds:
         wid = _active_world_id
@@ -173,11 +174,14 @@ def get_simulation_state() -> dict:
     agents_list = []
     for a in world.agents.values():
         coords = COUNTRY_COORDS.get(a.country, (0, 0))
+        jitter_seed = hash(a.id) % 1000
+        lat_jitter = (jitter_seed / 1000 - 0.5) * 4
+        lng_jitter = ((jitter_seed * 7) % 1000 / 1000 - 0.5) * 4
         total_assets = a.wallet + sum(a.inventory.get(r, 0) * world.market_prices.get(r, 0) for r in Resource)
         agents_list.append({
             "id": a.id, "name": a.name, "type": a.agent_type, "wallet": round(a.wallet, 2),
             "total_assets": round(total_assets, 2), "country": a.country,
-            "lat": coords[0], "lng": coords[1],
+            "lat": coords[0] + lat_jitter, "lng": coords[1] + lng_jitter,
             "influence": a.influence_score, "risk": a.risk_score,
             "personality": a.personality, "has_company": a.company_id is not None,
             "inventory": {k.value: round(v, 1) for k, v in a.inventory.items()},
@@ -301,6 +305,26 @@ def get_economy() -> dict:
     }
 
 
+@app.get("/api/events/feed")
+def get_events_feed() -> dict:
+    global _active_world_id
+    wid = _active_world_id or (list(engine.worlds.keys())[-1] if engine.worlds else None)
+    if not wid or wid not in engine.worlds:
+        return {"headlines": [], "tick": 0}
+    world = engine.worlds[wid]
+    headlines = []
+    for e in world.event_log[-20:]:
+        text = e
+        if "[AI]" in text:
+            parts = text.split("[AI]", 1)
+            text = parts[1].strip() if len(parts) > 1 else text
+            paren_idx = text.find("(")
+            if paren_idx > 0:
+                text = text[:paren_idx].strip()
+        headlines.append(text)
+    return {"headlines": headlines[-15:], "tick": world.tick_count}
+
+
 class SimControlRequest(BaseModel):
     action: str
     speed: Optional[float] = None
@@ -323,25 +347,108 @@ async def _auto_simulation_loop():
 
 @app.post("/api/simulation/control")
 async def simulation_control(payload: SimControlRequest) -> dict:
-    global _auto_sim_task, _auto_sim_speed, _auto_sim_running, _active_world_id
+    global _auto_sim_task, _auto_sim_speed, _auto_sim_running, _auto_sim_stopped, _active_world_id
 
     if payload.action == "create_world":
+        _auto_sim_running = False
+        _auto_sim_stopped = False
+        if _auto_sim_task:
+            _auto_sim_task.cancel()
+            _auto_sim_task = None
         name = payload.world_name or f"World-{len(engine.worlds) + 1}"
         world = engine.create_world(name)
         _active_world_id = world.id
-        count = payload.agent_count or 8
-        agent_names = [
-            "Central Bank Alpha", "Bank Nova", "Bank Omega",
-            "TechCorp", "EnergyCo", "FoodGlobal", "MetalWorks",
-            "State Federal", "Judge Prime", "TraderX",
-            "EnergyPower", "KnowledgeHub", "Bank Delta", "Citizen Zeta",
-            "State Republic", "Company Apex"
+        central_banks = [
+            ("Federal Reserve", "United States"), ("European Central Bank", "Germany"),
+            ("Bank of Japan", "Japan"), ("Bank of England", "United Kingdom"),
+            ("People's Bank of China", "China"),
         ]
-        for i in range(min(count, len(agent_names))):
-            engine.create_agent(world.id, agent_names[i])
-        return {"status": "ok", "world_id": world.id, "agents": count}
+        commercial_banks = [
+            ("JPMorgan Chase", "United States"), ("Goldman Sachs", "United States"),
+            ("HSBC", "United Kingdom"), ("Deutsche Bank", "Germany"),
+            ("BNP Paribas", "France"), ("UBS", "Switzerland"),
+            ("Barclays", "United Kingdom"), ("Credit Suisse", "Switzerland"),
+            ("Santander", "Spain"), ("ING Group", "Netherlands"),
+            ("Mitsubishi UFJ", "Japan"), ("ICBC", "China"),
+            ("Bank of Brazil", "Brazil"), ("Royal Bank of Canada", "Canada"),
+            ("ANZ Bank", "Australia"), ("Standard Chartered", "Singapore"),
+            ("Citibank", "United States"), ("Morgan Stanley", "United States"),
+            ("DBS Bank", "Singapore"), ("Nordea", "Sweden"),
+        ]
+        companies = [
+            ("TechCorp Global", "United States"), ("EnergyMax", "Saudi Arabia"),
+            ("FoodGlobal Inc", "Brazil"), ("MetalWorks Ltd", "Australia"),
+            ("KnowledgeHub", "India"), ("DataStream", "South Korea"),
+            ("AutoDrive", "Germany"), ("PharmaLife", "Switzerland"),
+            ("AeroSpace One", "France"), ("OceanTrade", "Singapore"),
+            ("MineralCo", "South Africa"), ("AgriTech", "Argentina"),
+            ("SolarPower", "Spain"), ("ChipDesign", "Taiwan"),
+            ("FinanceAI", "United Kingdom"), ("LogiChain", "Netherlands"),
+            ("CloudNet", "Ireland"), ("BioGen", "Denmark"),
+            ("RoboCorp", "Japan"), ("GreenEnergy", "Norway"),
+        ]
+        states = [
+            ("State of USA", "United States"), ("State of China", "China"),
+            ("State of Germany", "Germany"), ("State of Japan", "Japan"),
+            ("State of India", "India"), ("State of Brazil", "Brazil"),
+            ("State of UK", "United Kingdom"), ("State of France", "France"),
+            ("State of Russia", "Russia"), ("State of Australia", "Australia"),
+        ]
+        judges = [
+            ("Judge Alpha", "United States"), ("Judge Europa", "Belgium"),
+            ("Judge Asia", "Singapore"), ("Judge Africa", "South Africa"),
+            ("Judge Latam", "Brazil"),
+        ]
+        energy_provider = [("World Energy Authority", "UAE")]
+        citizens = [
+            (f"Citizen {c}", c) for c in random.sample(list(COUNTRY_COORDS.keys()), min(40, len(COUNTRY_COORDS)))
+        ]
+        all_agents = []
+        for name_c, country in central_banks:
+            a = engine.create_agent(world.id, name_c)
+            a.country = country
+            a.agent_type = "central_bank"
+            a.wallet = 10000.0
+            all_agents.append(a)
+        for name_c, country in commercial_banks:
+            a = engine.create_agent(world.id, name_c)
+            a.country = country
+            a.agent_type = "bank"
+            a.wallet = 1000.0
+            all_agents.append(a)
+        for name_c, country in companies:
+            a = engine.create_agent(world.id, name_c)
+            a.country = country
+            a.agent_type = "company"
+            a.wallet = 500.0
+            all_agents.append(a)
+        for name_c, country in states:
+            a = engine.create_agent(world.id, name_c)
+            a.country = country
+            a.agent_type = "state"
+            a.wallet = 5000.0
+            all_agents.append(a)
+        for name_c, country in judges:
+            a = engine.create_agent(world.id, name_c)
+            a.country = country
+            a.agent_type = "judge"
+            a.wallet = 200.0
+            all_agents.append(a)
+        for name_c, country in energy_provider:
+            a = engine.create_agent(world.id, name_c)
+            a.country = country
+            a.agent_type = "energy_provider"
+            a.wallet = 50000.0
+            all_agents.append(a)
+        for name_c, country in citizens:
+            a = engine.create_agent(world.id, name_c)
+            a.country = country
+            a.agent_type = "citizen"
+            all_agents.append(a)
+        return {"status": "ok", "world_id": world.id, "agents": len(all_agents)}
 
     if payload.action == "start":
+        _auto_sim_stopped = False
         if not _active_world_id:
             raise HTTPException(400, "no world created")
         if _auto_sim_running and _auto_sim_task and not _auto_sim_task.done():
@@ -357,6 +464,14 @@ async def simulation_control(payload: SimControlRequest) -> dict:
             _auto_sim_task.cancel()
             _auto_sim_task = None
         return {"status": "paused"}
+
+    if payload.action == "stop":
+        _auto_sim_running = False
+        _auto_sim_stopped = True
+        if _auto_sim_task:
+            _auto_sim_task.cancel()
+            _auto_sim_task = None
+        return {"status": "stopped"}
 
     if payload.action == "speed":
         _auto_sim_speed = max(1.0, payload.speed or 5.0)

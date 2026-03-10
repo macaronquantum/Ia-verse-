@@ -33,23 +33,48 @@ class Account:
 
 AGENT_TYPES = ["central_bank", "bank", "company", "state", "judge", "energy_provider", "trader", "citizen"]
 
-COUNTRIES = [
-    "United States", "United Kingdom", "Germany", "France", "Japan", "China",
-    "Brazil", "India", "Australia", "Canada", "Switzerland", "Singapore",
-    "South Korea", "South Africa", "Mexico", "Russia", "Italy", "Spain",
-    "Netherlands", "Sweden", "Norway", "UAE", "Saudi Arabia", "Nigeria",
-]
-
 COUNTRY_COORDS = {
-    "United States": (38.0, -97.0), "United Kingdom": (51.5, -0.1), "Germany": (51.2, 10.4),
-    "France": (46.6, 2.2), "Japan": (36.2, 138.3), "China": (35.9, 104.2),
-    "Brazil": (-14.2, -51.9), "India": (20.6, 79.0), "Australia": (-25.3, 133.8),
-    "Canada": (56.1, -106.3), "Switzerland": (46.8, 8.2), "Singapore": (1.4, 103.8),
-    "South Korea": (35.9, 127.8), "South Africa": (-30.6, 22.9), "Mexico": (23.6, -102.6),
-    "Russia": (61.5, 105.3), "Italy": (41.9, 12.6), "Spain": (40.5, -3.7),
-    "Netherlands": (52.1, 5.3), "Sweden": (60.1, 18.6), "Norway": (60.5, 8.5),
-    "UAE": (23.4, 53.8), "Saudi Arabia": (23.9, 45.1), "Nigeria": (9.1, 8.7),
+    "United States": (38.0, -97.0), "Canada": (56.1, -106.3), "Mexico": (23.6, -102.6),
+    "Brazil": (-14.2, -51.9), "Argentina": (-38.4, -63.6), "Colombia": (4.6, -74.1),
+    "Chile": (-35.7, -71.5), "Peru": (-9.2, -75.0), "Venezuela": (6.4, -66.6),
+    "Ecuador": (-1.8, -78.2), "Bolivia": (-16.3, -63.6), "Paraguay": (-23.4, -58.4),
+    "Uruguay": (-32.5, -55.8), "Guatemala": (15.8, -90.2), "Cuba": (21.5, -77.8),
+    "Dominican Republic": (18.7, -70.2), "Honduras": (15.2, -86.2), "Costa Rica": (9.7, -83.8),
+    "Panama": (8.5, -80.8), "Jamaica": (18.1, -77.3), "Trinidad": (10.4, -61.3),
+    "United Kingdom": (51.5, -0.1), "Germany": (51.2, 10.4), "France": (46.6, 2.2),
+    "Italy": (41.9, 12.6), "Spain": (40.5, -3.7), "Netherlands": (52.1, 5.3),
+    "Belgium": (50.8, 4.0), "Sweden": (60.1, 18.6), "Norway": (60.5, 8.5),
+    "Denmark": (56.3, 9.5), "Finland": (61.9, 25.7), "Poland": (51.9, 19.1),
+    "Austria": (47.5, 14.6), "Switzerland": (46.8, 8.2), "Ireland": (53.1, -7.7),
+    "Portugal": (39.4, -8.2), "Czech Republic": (49.8, 15.5), "Greece": (39.1, 21.8),
+    "Romania": (45.9, 24.9), "Hungary": (47.2, 19.5), "Ukraine": (48.4, 31.2),
+    "Turkey": (38.9, 35.2), "Israel": (31.0, 34.9), "Saudi Arabia": (23.9, 45.1),
+    "UAE": (23.4, 53.8), "Qatar": (25.4, 51.2), "Kuwait": (29.3, 47.5),
+    "Bahrain": (26.1, 50.6), "Oman": (21.5, 55.9), "Iran": (32.4, 53.7),
+    "Iraq": (33.2, 43.7), "Jordan": (30.6, 36.2), "Lebanon": (33.9, 35.9),
+    "Egypt": (26.8, 30.8), "Morocco": (31.8, -7.1), "Algeria": (28.0, 1.7),
+    "Tunisia": (33.9, 9.5), "Libya": (26.3, 17.2), "Nigeria": (9.1, 8.7),
+    "South Africa": (-30.6, 22.9), "Kenya": (-0.02, 37.9), "Ethiopia": (9.1, 40.5),
+    "Ghana": (7.9, -1.0), "Tanzania": (-6.4, 34.9), "Ivory Coast": (7.5, -5.5),
+    "Cameroon": (7.4, 12.4), "Senegal": (14.5, -14.5), "Uganda": (1.4, 32.3),
+    "Mozambique": (-18.7, 35.5), "Angola": (-11.2, 17.9), "DR Congo": (-4.0, 21.8),
+    "Zimbabwe": (-19.0, 29.2), "Rwanda": (-1.9, 29.9), "Zambia": (-13.1, 28.0),
+    "China": (35.9, 104.2), "Japan": (36.2, 138.3), "South Korea": (35.9, 127.8),
+    "India": (20.6, 79.0), "Indonesia": (-0.8, 113.9), "Thailand": (15.9, 100.9),
+    "Vietnam": (14.1, 108.3), "Philippines": (12.9, 121.8), "Malaysia": (4.2, 101.9),
+    "Singapore": (1.4, 103.8), "Bangladesh": (23.7, 90.4), "Pakistan": (30.4, 69.3),
+    "Myanmar": (21.9, 95.9), "Cambodia": (12.6, 105.0), "Sri Lanka": (7.9, 80.8),
+    "Nepal": (28.4, 84.1), "Taiwan": (23.7, 121.0), "Mongolia": (46.9, 103.8),
+    "Australia": (-25.3, 133.8), "New Zealand": (-40.9, 174.9),
+    "Russia": (61.5, 105.3), "Kazakhstan": (48.0, 68.0), "Uzbekistan": (41.4, 64.6),
+    "Georgia": (42.3, 43.4), "Azerbaijan": (40.1, 47.6),
+    "Iceland": (64.1, -21.9), "Luxembourg": (49.8, 6.1), "Malta": (35.9, 14.4),
+    "Cyprus": (35.1, 33.4), "Estonia": (58.6, 25.0), "Latvia": (56.9, 24.1),
+    "Lithuania": (55.2, 23.9), "Slovakia": (48.7, 19.7), "Slovenia": (46.2, 14.8),
+    "Croatia": (45.1, 15.2), "Serbia": (44.0, 21.0), "Bulgaria": (42.7, 25.5),
 }
+
+COUNTRIES = list(COUNTRY_COORDS.keys())
 
 
 def _assign_agent_type(name: str) -> str:

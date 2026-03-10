@@ -192,7 +192,15 @@ class WorldEngine:
             "company_count": len(world.companies),
         }
 
-        for agent in world.agents.values():
+        import random as _rand
+        all_agents = list(world.agents.values())
+        max_ai_per_tick = 10
+        if len(all_agents) > max_ai_per_tick:
+            ai_agents = _rand.sample(all_agents, max_ai_per_tick)
+        else:
+            ai_agents = all_agents
+
+        for agent in ai_agents:
             company = world.companies.get(agent.company_id) if agent.company_id else None
             bank_balance = 0.0
             acct = world.bank.accounts.get(agent.id)

@@ -7,7 +7,7 @@ A FastAPI-based virtual world simulation backend (economic game) with a premium 
 - **Language**: Python 3.11
 - **Framework**: FastAPI + Uvicorn
 - **AI Model**: Claude (via Replit AI Integrations — Anthropic) using `claude-haiku-4-5` for agent decisions
-- **Frontend**: Premium glassmorphism SPA with 3D globe (Three.js), agent explorer, economy dashboard, live AI feed, simulation controls
+- **Frontend**: Light-theme glassmorphism SPA with Leaflet.js flat planisphere map, agent explorer, economy dashboard, live AI feed, simulation controls
 - **No database**: All state is in-memory via the `WorldEngine`
 - **Port**: 5000
 
@@ -44,12 +44,23 @@ A FastAPI-based virtual world simulation backend (economic game) with a premium 
 - `tests/` — pytest test suite (61 tests, 38 passing)
 
 ## Dashboard Features
-- **3D Globe View**: Three.js globe with agents as glowing 3D objects (cubes for banks, spheres for others), drag rotation, zoom, hover tooltips, star field
-- **Agent Explorer**: Searchable/filterable/sortable agent list, click for profile with wealth chart, inventory, decision log
-- **Economy Dashboard**: Money supply, Gini index, resource bars, market prices, leaderboard
-- **Simulation Controls**: Create world, start/pause auto-sim, speed slider, manual tick, spawn agents
-- **Live AI Feed**: Real-time Claude AI decision events with color-coded entries
+- **Flat World Map**: Leaflet.js planisphere with CARTO light tiles, pan/zoom, agent markers with type-based colors and size proportional to wealth, click to see agent info popup
+- **Agent Explorer**: Searchable/filterable/sortable agent list (by type, wealth, influence, name), click for detailed profile with wealth chart, inventory, decision log, bank balance
+- **Economy Dashboard**: Money supply, Gini index with progress bar, resource bars, market prices, leaderboard with gold/silver/bronze, agent/company counts, bankruptcies
+- **Simulation Controls**: Create world (bootstraps 101 agents: 5 central banks, 20 banks, 20 companies, 10 states, 5 judges, 1 energy provider, 40 citizens across 100 countries), Start/Pause/Stop, auto-sim at 5s/tick
+- **Live AI Feed**: Real-time Claude AI decision events in glassmorphism feed panel
 - **Auto-polling**: State refreshes every 4 seconds
+- **Design**: Light theme, elegant glassmorphism, Inter font, sober/minimal colors, fully responsive (desktop/tablet/mobile)
+
+## World Bootstrap (create_world)
+- 5 central banks (Federal Reserve, ECB, BoJ, BoE, PBoC) with $10K each
+- 20 commercial banks (JPMorgan, Goldman Sachs, HSBC, etc.) with $1K each
+- 20 companies (TechCorp, EnergyMax, etc.) with $500 each
+- 10 states (USA, China, Germany, etc.) with $5K each
+- 5 judges across continents with $200 each
+- 1 World Energy Authority with $50K
+- 40 random citizens across 100 countries with $100 each
+- AI tick limit: 10 agents per tick (random subset) for performance
 
 ## Dashboard API Endpoints
 - `GET /api/simulation/state` — Full world state (agents, companies, prices, events)

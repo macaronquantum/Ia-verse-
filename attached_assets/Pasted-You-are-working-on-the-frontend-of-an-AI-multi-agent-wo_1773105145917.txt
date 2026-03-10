@@ -1,0 +1,245 @@
+You are working on the frontend of an AI multi-agent world simulation.  
+The backend simulation already exists and exposes APIs.
+
+The current frontend implementation is not acceptable.  
+The design quality, UX, and world visualization must be completely redesigned and improved.
+
+Read these instructions carefully and implement them exactly.
+
+------------------------------------------------
+
+1. COMPLETE FRONTEND REDESIGN
+
+The current UI design is poor and must be replaced.
+
+Redesign the entire interface inspired by the reference websites and images previously provided.
+
+Design goals:
+
+• modern  
+• premium quality  
+• elegant  
+• minimalist  
+• futuristic  
+
+Use a liquid glass / frosted glass aesthetic with subtle reflections and depth.
+
+Important visual principles:
+
+• glassmorphism
+• subtle 3D surfaces
+• smooth animations
+• soft shadows
+• elegant typography
+• restrained color palette
+
+Colors should be:
+
+• sober
+• elegant
+• minimal
+• not flashy
+
+The interface must look like a high-end AI simulation control panel, not a basic dashboard.
+
+------------------------------------------------
+
+2. RESPONSIVE DESIGN
+
+The interface must be fully responsive.
+
+Requirements:
+
+• works smoothly on desktop and mobile
+• proper scrolling in all panels
+• panels must not overflow
+• no UI elements cut off
+• scroll areas must behave correctly
+
+Test:
+
+• mobile screen
+• tablet
+• desktop
+
+Scrolling must be smooth and natural everywhere.
+
+------------------------------------------------
+
+3. WORLD MAP VISUALIZATION
+
+Important correction.
+
+The world must NOT be a rotating globe.
+
+Instead implement:
+
+A flat planisphere world map.
+
+Requirements:
+
+• flat world map projection
+• the user can pan around the map
+• smooth drag with finger or mouse
+• zoom in and out
+• responsive interactions
+
+Recommended technologies:
+
+• Mapbox GL
+• deck.gl
+• or a lightweight WebGL map library
+
+------------------------------------------------
+
+4. AGENT VISUALIZATION ON MAP
+
+Agents must appear on the map.
+
+Agent types:
+
+• central banks
+• commercial banks
+• companies
+• states
+• judges
+• energy provider
+
+Each agent should be represented visually.
+
+Visual rules:
+
+• size proportional to wealth
+• color or icon based on agent type
+• subtle glow or highlight
+
+Clicking an agent must open a responsive info panel showing:
+
+• name
+• type
+• wealth
+• energy holdings
+• country
+• recent actions
+• logs
+
+This panel must be easy to read and scrollable.
+
+------------------------------------------------
+
+5. WORLD CREATION LOGIC
+
+When creating a world, the system must use the existing bootstrap configuration already implemented in the backend.
+
+The initial world must automatically include:
+
+• 5 central banks
+• 20 commercial banks
+• continents and countries
+• 100 countries
+• the energy provider
+• initial agents
+
+Important:
+
+Central banks and commercial banks are agents themselves and must appear in the simulation.
+
+There must always be a minimum number of agents active.
+
+------------------------------------------------
+
+6. SIMULATION CONTROL
+
+Currently the simulation behavior is unclear and ticks may not run correctly.
+
+Fix this system.
+
+Add clear controls:
+
+START SIMULATION  
+PAUSE SIMULATION  
+STOP SIMULATION
+
+Important behavior:
+
+When the simulation is running:
+
+• ticks occur every 5 seconds
+• agents act
+• LLM calls are executed
+
+When the simulation is paused or stopped:
+
+• ticks stop
+• no agent actions
+• no LLM API calls
+• no credit consumption
+
+This is critical because LLM calls (Claude) consume credits.
+
+The user must be able to stop the simulation to stop cost usage.
+
+------------------------------------------------
+
+7. LIVE SIMULATION FEED
+
+Add a live event panel.
+
+Every ~30 seconds generate a short textual summary of what is happening in the world.
+
+Examples:
+
+"Bank Alpha increased energy purchases."
+
+"European Central Bank adjusted currency supply."
+
+"Company Delta expanded operations in Brazil."
+
+"Judge agent initiated investigation."
+
+This should feel like live news of the AI world.
+
+------------------------------------------------
+
+8. AGENT EXPLORER
+
+Add a dedicated interface to browse agents.
+
+The user must be able to:
+
+Filter by type:
+
+• central banks
+• banks
+• companies
+• states
+• judges
+
+Display list with:
+
+• wealth
+• influence
+• activity
+
+Clicking an agent opens detailed logs and decision history.
+
+------------------------------------------------
+
+9. TEST EVERYTHING
+
+Before finishing:
+
+• test world creation
+• test map navigation
+• test simulation start/pause/stop
+• verify ticks run every 5 seconds
+• confirm no API calls happen when simulation is stopped
+• test mobile responsiveness
+
+Fix all UX issues.
+
+------------------------------------------------
+
+Goal:
+
+The final interface must feel like exploring a living AI world simulation, with a beautiful and intuitive control panel.
