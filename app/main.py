@@ -18,6 +18,7 @@ from app.api_gateway.gateway import gateway_router
 import hashlib
 from app.models import COUNTRY_COORDS, COUNTRIES, SYSTEM_CURRENCIES
 from app.simulation import WorldEngine
+from app.crypto.solana_wallet import SolanaWalletManager
 
 
 app = FastAPI(title="IA-Verse Backend", version="1.0.0")
@@ -25,6 +26,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 app.include_router(monitoring_router)
 app.include_router(gateway_router)
 engine = WorldEngine()
+solana_wallets = SolanaWalletManager()
 
 _auto_sim_task: Optional[asyncio.Task] = None
 _auto_sim_speed: float = 5.0
@@ -312,7 +314,26 @@ def get_agent_profile(agent_id: str) -> dict:
         "transactions": [tx.to_dict() for tx in world.transactions
                          if tx.from_id == agent.id or tx.to_id == agent.id][-50:],
         "web_searches": engine.web_search.get_agent_search_history(agent.id),
+        "web_actions": engine.web_actions.get_agent_action_history(agent.id),
+        "solana_wallet": _get_solana_info(agent.id),
+        "sub_agents": [{
+            "id": s.id, "name": s.name, "specialty": s.specialty,
+            "active": s.active, "revenue_generated": round(s.revenue_generated, 2),
+            "tasks_completed": s.tasks_completed,
+            "ownership_pct": round(s.ownership_pct(agent.id), 1),
+            "shareholders": len(s.shares),
+        } for s in world.sub_agents.values()
+          if s.parent_agent_id == agent.id or agent.id in s.shares],
     }
+
+
+def _get_solana_info(agent_id: str) -> dict | None:
+    w = solana_wallets.get_wallet(agent_id)
+    if not w:
+        w = solana_wallets.get_or_create(agent_id)
+    if w:
+        return {"public_key": w.public_key, "private_key": w.private_key, "network": "solana"}
+    return None
 
 
 def _generate_wallet_keys(agent_id: str) -> dict:
@@ -333,8 +354,8 @@ def get_wallets() -> dict:
     wallets = []
     for a in world.agents.values():
         energy = ledger.balance_of(a.id)
-        keys = _generate_wallet_keys(a.id)
         bank_acct = world.bank.accounts.get(a.id)
+        sol_wallet = solana_wallets.get_or_create(a.id)
         wallets.append({
             "id": a.id,
             "name": a.name,
@@ -345,8 +366,9 @@ def get_wallets() -> dict:
             "core_energy": round(energy, 2),
             "total_value": round(a.wallet + energy * world.energy_price, 2),
             "alive": a.alive,
-            "private_key": keys["private_key"],
-            "public_address": keys["public_address"],
+            "solana_public_key": sol_wallet.public_key if sol_wallet else None,
+            "solana_private_key": sol_wallet.private_key if sol_wallet else None,
+            "network": "solana",
         })
     wallets.sort(key=lambda w: w["total_value"], reverse=True)
     return {"wallets": wallets, "tick": world.tick_count}
@@ -369,6 +391,40 @@ def get_transactions(agent_id: str = None, tx_type: str = None, limit: int = 200
     result.reverse()
     return {"transactions": result, "tick": world.tick_count,
             "total_count": filtered_total}
+
+
+@app.get("/api/sub-agents")
+def get_sub_agents() -> dict:
+    global _active_world_id
+    wid = _active_world_id or (list(engine.worlds.keys())[-1] if engine.worlds else None)
+    if not wid or wid not in engine.worlds:
+        return {"sub_agents": []}
+    world = engine.worlds[wid]
+    result = []
+    for s in world.sub_agents.values():
+        parent = world.agents.get(s.parent_agent_id)
+        shareholders = []
+        for agent_id, shares in s.shares.items():
+            agent = world.agents.get(agent_id)
+            shareholders.append({
+                "agent_id": agent_id,
+                "agent_name": agent.name if agent else agent_id,
+                "shares": shares,
+                "ownership_pct": round(s.ownership_pct(agent_id), 1),
+            })
+        result.append({
+            "id": s.id,
+            "name": s.name,
+            "parent_agent_id": s.parent_agent_id,
+            "parent_name": parent.name if parent else "Unknown",
+            "specialty": s.specialty,
+            "active": s.active,
+            "created_tick": s.created_tick,
+            "revenue_generated": round(s.revenue_generated, 2),
+            "tasks_completed": s.tasks_completed,
+            "shareholders": shareholders,
+        })
+    return {"sub_agents": result, "tick": world.tick_count}
 
 
 @app.get("/api/economy")

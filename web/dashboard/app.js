@@ -51,7 +51,10 @@ const TX_COLORS = {
   loan_repaid: '#16a34a', acquire_energy: '#0891b2', energy_burn: '#dc2626',
   revenue: '#16a34a', labor_income: '#64748b', dividend: '#ca8a04',
   company_create: '#6366f1', investment: '#2563eb', liquidity_injection: '#7c3aed',
-  interest_rate_change: '#dc2626', web_search: '#0ea5e9'
+  interest_rate_change: '#dc2626', web_search: '#0ea5e9',
+  sub_agent_create: '#8b5cf6', sub_agent_revenue: '#a855f7',
+  bank_lending: '#2563eb', interest_revenue: '#059669',
+  web_action: '#06b6d4'
 };
 
 function initMap() {
@@ -287,6 +290,9 @@ function renderAgentProfile(a, tab = 'overview') {
       <button class="profile-tab ${tab === 'loans' ? 'active' : ''}" data-tab="loans" onclick="switchProfileTab('loans')">Loans</button>
       <button class="profile-tab ${tab === 'actions' ? 'active' : ''}" data-tab="actions" onclick="switchProfileTab('actions')">Actions</button>
       <button class="profile-tab ${tab === 'research' ? 'active' : ''}" data-tab="research" onclick="switchProfileTab('research')">Web Research</button>
+      <button class="profile-tab ${tab === 'web_actions' ? 'active' : ''}" data-tab="web_actions" onclick="switchProfileTab('web_actions')">Web Actions</button>
+      <button class="profile-tab ${tab === 'sub_agents' ? 'active' : ''}" data-tab="sub_agents" onclick="switchProfileTab('sub_agents')">Sub-Agents</button>
+      <button class="profile-tab ${tab === 'wallet' ? 'active' : ''}" data-tab="wallet" onclick="switchProfileTab('wallet')">Solana Wallet</button>
     </div>
     <div id="profile-content" class="profile-content"></div>
   `;
@@ -391,6 +397,64 @@ function renderProfileContent(a, tab) {
         <div class="research-meta">${s.result_count} result${s.result_count !== 1 ? 's' : ''} found</div>
       </div>
     `).reverse().join('')}</div>`;
+  } else if (tab === 'web_actions') {
+    const actions = a.web_actions || [];
+    if (!actions.length) {
+      el.innerHTML = '<div class="empty-state">No web actions yet. Agent will perform autonomous web actions when needed.</div>';
+      return;
+    }
+    el.innerHTML = `<div class="research-list">${actions.map(wa => `
+      <div class="research-card" style="border-left:3px solid #06b6d4">
+        <div class="research-header">
+          <span class="research-query" style="color:#06b6d4">${esc(wa.action_type)}</span>
+          <span class="action-tick">Tick ${wa.tick}</span>
+        </div>
+        <div class="wa-url">${esc(wa.url || 'N/A')}</div>
+        <div class="wa-status"><span class="wa-status-badge ${wa.status === 'success' ? 'success' : 'fail'}">${wa.status}</span></div>
+        ${wa.data ? `<div class="wa-data">${esc(JSON.stringify(wa.data).substring(0, 300))}</div>` : ''}
+      </div>
+    `).reverse().join('')}</div>`;
+  } else if (tab === 'sub_agents') {
+    const subs = a.sub_agents || [];
+    if (!subs.length) {
+      el.innerHTML = '<div class="empty-state">No sub-agents. This agent can create sub-agents specialized in tasks like market research, trading, or strategy analysis.</div>';
+      return;
+    }
+    el.innerHTML = `<div class="sub-agents-list">${subs.map(s => {
+      const specColor = {market_research:'#0ea5e9',code_generation:'#8b5cf6',social_media:'#ec4899',strategy_analysis:'#f59e0b',trading:'#16a34a',data_collection:'#06b6d4',content_creation:'#a855f7',risk_assessment:'#dc2626'}[s.specialty] || '#64748b';
+      return `<div class="sub-agent-card">
+        <div class="sub-agent-header">
+          <span class="sub-agent-name">${esc(s.name)}</span>
+          <span class="sub-agent-status ${s.active ? 'active' : 'inactive'}">${s.active ? 'Active' : 'Inactive'}</span>
+        </div>
+        <div class="sub-agent-specialty" style="color:${specColor}">${s.specialty.replace(/_/g, ' ')}</div>
+        <div class="sub-agent-stats">
+          <div class="sub-agent-stat"><span class="sub-agent-label">Revenue</span><span class="sub-agent-val">${s.revenue_generated.toFixed(2)}</span></div>
+          <div class="sub-agent-stat"><span class="sub-agent-label">Tasks</span><span class="sub-agent-val">${s.tasks_completed}</span></div>
+          <div class="sub-agent-stat"><span class="sub-agent-label">Your Ownership</span><span class="sub-agent-val">${s.ownership_pct.toFixed(1)}%</span></div>
+          <div class="sub-agent-stat"><span class="sub-agent-label">Shareholders</span><span class="sub-agent-val">${s.shareholders}</span></div>
+        </div>
+      </div>`;
+    }).join('')}</div>`;
+  } else if (tab === 'wallet') {
+    const sw = a.solana_wallet;
+    if (!sw) {
+      el.innerHTML = '<div class="empty-state">No Solana wallet assigned yet.</div>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="solana-wallet-card">
+        <div class="sw-header">Solana Wallet</div>
+        <div class="sw-row"><span class="sw-label">Network</span><span class="sw-val">${esc(sw.network || 'solana')}</span></div>
+        <div class="sw-row"><span class="sw-label">Public Key</span><code class="sw-key">${esc(sw.public_key)}</code></div>
+        <div class="sw-row">
+          <span class="sw-label">Private Key</span>
+          <span class="sw-pk-wrap">
+            <button class="reveal-btn" onclick="this.nextElementSibling.style.display='inline';this.style.display='none'">Reveal</button>
+            <code class="sw-key pk-hidden" style="display:none">${esc(sw.private_key)}</code>
+          </span>
+        </div>
+      </div>`;
   }
 }
 
@@ -443,6 +507,35 @@ function renderTxCard(tx, compact = false) {
       ${topResults.map(r => `<div class="tx-detail-row"><span>Found</span><span><a href="${esc(r.url || '')}" target="_blank" rel="noopener">${esc((r.title || '').substring(0, 50))}</a></span></div>`).join('')}
       ${details.reasoning ? `<div class="tx-detail-row"><span>Reason</span><span>${esc(details.reasoning)}</span></div>` : ''}
     `;
+  } else if (tx.type === 'sub_agent_create') {
+    detailsHtml = `
+      <div class="tx-detail-row"><span>Sub-Agent</span><span>${esc(details.sub_agent_name || '')}</span></div>
+      <div class="tx-detail-row"><span>Specialty</span><span>${esc(details.specialty || '')}</span></div>
+      ${details.reasoning ? `<div class="tx-detail-row"><span>Reason</span><span>${esc(details.reasoning)}</span></div>` : ''}
+    `;
+  } else if (tx.type === 'sub_agent_revenue') {
+    detailsHtml = `
+      <div class="tx-detail-row"><span>Sub-Agent</span><span>${esc(details.sub_agent_name || '')}</span></div>
+      <div class="tx-detail-row"><span>Specialty</span><span>${esc(details.specialty || '')}</span></div>
+      <div class="tx-detail-row"><span>Revenue</span><span>${(details.revenue || tx.amount).toFixed(2)}</span></div>
+    `;
+  } else if (tx.type === 'bank_lending') {
+    detailsHtml = `
+      <div class="tx-detail-row"><span>Borrower</span><span>${esc(details.borrower || '')}</span></div>
+      <div class="tx-detail-row"><span>Credit Score</span><span>${(details.credit_score || 0).toFixed(0)}</span></div>
+      <div class="tx-detail-row"><span>Interest Rate</span><span>${((details.interest_rate || 0) * 100).toFixed(1)}%</span></div>
+    `;
+  } else if (tx.type === 'interest_revenue') {
+    detailsHtml = `
+      <div class="tx-detail-row"><span>Source</span><span>${esc(details.source || 'loan interest')}</span></div>
+      <div class="tx-detail-row"><span>Revenue</span><span>${(details.revenue || tx.amount).toFixed(2)}</span></div>
+    `;
+  } else if (tx.type === 'web_action') {
+    detailsHtml = `
+      <div class="tx-detail-row"><span>Action Type</span><span>${esc(details.action_type || '')}</span></div>
+      <div class="tx-detail-row"><span>URL</span><span>${esc((details.url || '').substring(0, 50))}</span></div>
+      <div class="tx-detail-row"><span>Status</span><span>${esc(details.status || '')}</span></div>
+    `;
   }
 
   const hasDetails = detailsHtml.length > 0;
@@ -493,6 +586,9 @@ function renderWallets(list) {
   tbody.innerHTML = list.map(w => {
     const color = TYPE_COLORS[w.type] || '#64748b';
     const statusClass = w.alive === false ? 'dead-row' : '';
+    const pubKey = w.solana_public_key || w.public_address || '';
+    const privKey = w.solana_private_key || w.private_key || '';
+    const network = w.network || 'solana';
     return `<tr class="${statusClass}">
       <td><div class="wallet-agent"><span class="wallet-dot" style="background:${color}"></span>${esc(w.name)}</div></td>
       <td><span class="type-badge" style="background:${color}15;color:${color}">${w.type.replace('_', ' ')}</span></td>
@@ -500,8 +596,8 @@ function renderWallets(list) {
       <td class="num">${w.wallet_balance.toFixed(2)}</td>
       <td class="num">${w.bank_balance.toFixed(2)}</td>
       <td class="num">${w.core_energy.toFixed(2)}</td>
-      <td><code class="addr">${w.public_address.substring(0, 10)}...${w.public_address.slice(-6)}</code></td>
-      <td><button class="reveal-btn" onclick="revealKey(this, '${w.private_key}')">Reveal</button></td>
+      <td><code class="addr" title="${esc(pubKey)}">${pubKey.substring(0, 8)}...${pubKey.slice(-6)}</code><span class="network-tag">${network}</span></td>
+      <td><button class="reveal-btn" onclick="revealKey(this, '${esc(privKey)}')">Reveal</button></td>
     </tr>`;
   }).join('');
 }

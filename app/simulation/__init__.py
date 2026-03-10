@@ -6,9 +6,10 @@ from uuid import uuid4
 
 import logging
 
-from app.models import Agent, Company, World
+from app.models import Agent, Company, World, SubAgent, SUB_AGENT_SPECIALTIES
 from app.energy.core import EnergyLedger, EnergyConfig
 from app.web_search import WebSearchEngine, SEARCH_ENERGY_COST
+from app.web_actions import WebActionEngine, WEB_ACTION_ENERGY_COST
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,7 @@ class WorldEngine:
         self.scheduler = AutonomousScheduler()
         self._llm = None
         self.web_search = WebSearchEngine()
+        self.web_actions = WebActionEngine()
 
     @property
     def llm(self):
@@ -162,12 +164,34 @@ class WorldEngine:
         world.log(f"{agent_name} repaid {amount:.2f}")
         world.record_tx("loan_repaid", owner_id, agent_name, "bank", "System Bank", amount, currency, loan_details)
 
+    def create_sub_agent(self, world_id: str, parent_agent_id: str, name: str, specialty: str) -> SubAgent:
+        world = self.get_world(world_id)
+        if parent_agent_id not in world.agents:
+            raise ValueError("parent agent not found")
+        if specialty not in SUB_AGENT_SPECIALTIES:
+            specialty = "market_research"
+        sub = SubAgent(
+            id=str(uuid4()),
+            name=name,
+            parent_agent_id=parent_agent_id,
+            specialty=specialty,
+            created_tick=world.tick_count,
+        )
+        world.sub_agents[sub.id] = sub
+        world.log(f"{world.agents[parent_agent_id].name} created sub-agent '{name}' ({specialty})")
+        world.record_tx("sub_agent_create", parent_agent_id,
+                        world.agents[parent_agent_id].name, sub.id, name, 0, "",
+                        {"specialty": specialty, "parent": world.agents[parent_agent_id].name})
+        return sub
+
     def tick(self, world_id: str, steps: int = 1) -> World:
         world = self.get_world(world_id)
         ledger = self.get_ledger(world_id)
         for _ in range(steps):
             world.tick_count += 1
             self._run_agent_ai(world, ledger)
+            self._run_banking_system(world, ledger)
+            self._run_sub_agents(world, ledger)
             self._run_economy(world, ledger)
             world.bank.apply_interest()
             self._enforce_survival(world, ledger)
@@ -283,6 +307,9 @@ class WorldEngine:
                 bank_balance = acct.balance
 
             web_knowledge = self.web_search.get_agent_knowledge(agent.id)
+            web_action_knowledge = self.web_actions.get_agent_knowledge(agent.id)
+            agent_subs = [s for s in world.sub_agents.values()
+                          if s.parent_agent_id == agent.id and s.active]
 
             agent_state = {
                 "name": agent.name,
@@ -297,6 +324,9 @@ class WorldEngine:
                 "bank_balance": round(bank_balance, 2),
                 "alive": agent.alive,
                 "web_knowledge": web_knowledge,
+                "web_action_knowledge": web_action_knowledge,
+                "sub_agents": len(agent_subs),
+                "sub_agent_revenue": round(sum(s.revenue_generated for s in agent_subs), 2),
             }
 
             try:
@@ -319,7 +349,8 @@ class WorldEngine:
                 "request_investment", "acquire_energy", "generate_revenue",
                 "deposit", "withdraw", "take_loan", "repay_loan",
                 "create_company", "hire_worker", "set_interest_rate",
-                "inject_liquidity", "web_search", "idle"
+                "inject_liquidity", "web_search", "web_action",
+                "create_sub_agent", "idle"
             }
             action = decision.get("action", "idle")
             if action not in VALID_ACTIONS:
@@ -464,6 +495,43 @@ class WorldEngine:
                 world.record_tx("liquidity_injection", agent.id, agent.name, "bank", "System Bank",
                                 amount, agent.currency)
 
+        elif action == "create_sub_agent":
+            specialty = str(decision.get("specialty", "market_research"))[:50]
+            sub_name = str(decision.get("sub_agent_name", f"{agent.name}'s {specialty} agent"))[:80]
+            existing_subs = [s for s in world.sub_agents.values() if s.parent_agent_id == agent.id]
+            if len(existing_subs) >= 5:
+                world.log(f"[AI] {agent.name} cannot create more sub-agents (max 5)")
+            else:
+                try:
+                    self.create_sub_agent(world.id, agent.id, sub_name, specialty)
+                    world.log(f"[AI] {agent.name} launched sub-agent '{sub_name}' ({specialty}) ({reasoning})")
+                except Exception as e:
+                    world.log(f"[AI] {agent.name} failed to create sub-agent: {e}")
+
+        elif action == "web_action":
+            energy_balance = ledger.balance_of(agent.id)
+            if energy_balance < WEB_ACTION_ENERGY_COST:
+                world.log(f"[AI] {agent.name} lacks EnergyCore for web action")
+                return
+            action_type = str(decision.get("action_type", "market_data"))[:50]
+            url = str(decision.get("url", ""))[:500]
+            if action_type == "market_data":
+                url = "https://api.coingecko.com/api/v3/simple/price"
+            elif not url:
+                url = "https://httpbin.org/get"
+            try:
+                ledger.burn(agent.id, WEB_ACTION_ENERGY_COST)
+                world.total_energy_burned += WEB_ACTION_ENERGY_COST
+                agent.core_energy = ledger.balance_of(agent.id)
+            except Exception:
+                return
+            result = self.web_actions.perform_action(agent.id, action_type, url, world.tick_count)
+            world.log(f"[AI] {agent.name} performed web action: {action_type} → {result.status}")
+            world.record_tx("web_action", agent.id, agent.name, "system", "Web/Internet",
+                            WEB_ACTION_ENERGY_COST, "EC",
+                            {"action_type": action_type, "url": url[:100], "status": result.status,
+                             "reasoning": reasoning})
+
         elif action == "web_search":
             energy_balance = ledger.balance_of(agent.id)
             if energy_balance < SEARCH_ENERGY_COST:
@@ -558,6 +626,119 @@ class WorldEngine:
                 agent.core_energy = ledger.balance_of(agent.id)
             except Exception:
                 pass
+
+    def _run_banking_system(self, world: World, ledger: EnergyLedger) -> None:
+        import random as _rand
+        bank_agents = [a for a in world.agents.values()
+                       if a.alive and a.agent_type == "bank"]
+        central_banks = [a for a in world.agents.values()
+                         if a.alive and a.agent_type == "central_bank"]
+
+        if world.bank.reserve < 5000 and central_banks:
+            cb = _rand.choice(central_banks)
+            inject_amount = min(2000, cb.wallet * 0.2)
+            if inject_amount > 100:
+                cb.wallet -= inject_amount
+                world.bank.reserve += inject_amount
+                world.log(f"{cb.name} injected {inject_amount:.0f} liquidity (reserve was low)")
+                world.record_tx("liquidity_injection", cb.id, cb.name,
+                                "bank", "System Bank", inject_amount, cb.currency,
+                                {"reason": "autonomous reserve replenishment"})
+
+        underfunded_companies = [c for c in world.companies.values() if c.cash < 100]
+        underfunded_agents = [a for a in world.agents.values()
+                              if a.alive and a.agent_type == "citizen"
+                              and a.wallet < 50 and not a.company_id]
+
+        for bank_agent in bank_agents:
+            if world.bank.reserve < 500:
+                break
+
+            targets = []
+            for company in underfunded_companies[:3]:
+                owner = world.agents.get(company.owner_agent_id)
+                if owner and not world.bank.get_loans(company.owner_agent_id):
+                    credit_score = (owner.wallet + ledger.balance_of(owner.id) * 5 +
+                                    company.productivity * 50)
+                    if credit_score > 30:
+                        targets.append(("company", owner, company, credit_score))
+
+            for citizen in underfunded_agents[:2]:
+                if not world.bank.get_loans(citizen.id):
+                    credit_score = citizen.wallet + ledger.balance_of(citizen.id) * 5
+                    if credit_score > 10:
+                        targets.append(("citizen", citizen, None, credit_score))
+
+            for target_type, borrower, company, score in targets:
+                if world.bank.reserve < 200:
+                    break
+                loan_amount = min(200 if target_type == "company" else 100,
+                                  world.bank.reserve * 0.1)
+                if loan_amount < 20:
+                    continue
+                try:
+                    self.request_loan(world.id, borrower.id, loan_amount)
+                    target_name = company.name if company else borrower.name
+                    world.log(f"{bank_agent.name} funded {target_name} with {loan_amount:.0f} "
+                              f"(credit score: {score:.0f})")
+                    world.record_tx("bank_lending", bank_agent.id, bank_agent.name,
+                                    borrower.id, borrower.name, loan_amount,
+                                    borrower.currency,
+                                    {"credit_score": round(score, 1),
+                                     "target_type": target_type,
+                                     "bank": bank_agent.name})
+                except ValueError:
+                    pass
+
+        interest_earned = 0.0
+        for loan in world.bank.loans.values():
+            interest_earned += loan.remaining * loan.interest_rate
+        if interest_earned > 0 and bank_agents:
+            share = interest_earned / len(bank_agents)
+            for ba in bank_agents:
+                ba.wallet += share * 0.3
+            world.record_tx("interest_revenue", "bank", "System Bank",
+                            "banks", "Commercial Banks", interest_earned * 0.3, "USC",
+                            {"total_interest": round(interest_earned, 2),
+                             "bank_count": len(bank_agents)})
+
+    def _run_sub_agents(self, world: World, ledger: EnergyLedger) -> None:
+        import random as _rand
+        for sub in world.sub_agents.values():
+            if not sub.active:
+                continue
+            parent = world.agents.get(sub.parent_agent_id)
+            if not parent or not parent.alive:
+                sub.active = False
+                continue
+
+            revenue_map = {
+                "market_research": (2.0, 5.0),
+                "code_generation": (3.0, 8.0),
+                "social_media": (1.0, 4.0),
+                "strategy_analysis": (2.5, 6.0),
+                "trading": (1.0, 10.0),
+                "data_collection": (1.5, 4.5),
+                "content_creation": (2.0, 5.5),
+                "risk_assessment": (2.0, 5.0),
+            }
+            low, high = revenue_map.get(sub.specialty, (1.0, 4.0))
+            revenue = round(_rand.uniform(low, high), 2)
+            sub.revenue_generated += revenue
+            sub.tasks_completed += 1
+
+            for agent_id, share_pct in sub.shares.items():
+                agent = world.agents.get(agent_id)
+                if agent and agent.alive:
+                    payout = revenue * (share_pct / sub.total_shares())
+                    agent.wallet += payout
+
+            world.record_tx("sub_agent_revenue", sub.id, sub.name,
+                            sub.parent_agent_id, parent.name, revenue,
+                            parent.currency,
+                            {"specialty": sub.specialty,
+                             "tasks_completed": sub.tasks_completed,
+                             "shareholders": len(sub.shares)})
 
     def _enforce_survival(self, world: World, ledger: EnergyLedger) -> None:
         for agent in world.agents.values():

@@ -252,6 +252,39 @@ class Transaction:
         }
 
 
+SUB_AGENT_SPECIALTIES = [
+    "market_research", "code_generation", "social_media",
+    "strategy_analysis", "trading", "data_collection",
+    "content_creation", "risk_assessment"
+]
+
+
+@dataclass
+class SubAgent:
+    id: str
+    name: str
+    parent_agent_id: str
+    specialty: str = "market_research"
+    shares: Dict[str, float] = field(default_factory=dict)
+    active: bool = True
+    created_tick: int = 0
+    revenue_generated: float = 0.0
+    tasks_completed: int = 0
+
+    def __post_init__(self):
+        if self.parent_agent_id and self.parent_agent_id not in self.shares:
+            self.shares[self.parent_agent_id] = 100.0
+
+    def total_shares(self) -> float:
+        return sum(self.shares.values())
+
+    def ownership_pct(self, agent_id: str) -> float:
+        total = self.total_shares()
+        if total <= 0:
+            return 0.0
+        return self.shares.get(agent_id, 0.0) / total * 100.0
+
+
 @dataclass
 class World:
     id: str
@@ -259,6 +292,7 @@ class World:
     tick_count: int = 0
     agents: Dict[str, Agent] = field(default_factory=dict)
     companies: Dict[str, Company] = field(default_factory=dict)
+    sub_agents: Dict[str, SubAgent] = field(default_factory=dict)
     bank: Bank = field(default_factory=lambda: Bank(id=str(uuid4())))
     energy_price: float = 10.0
     total_energy_supply: float = 10000.0

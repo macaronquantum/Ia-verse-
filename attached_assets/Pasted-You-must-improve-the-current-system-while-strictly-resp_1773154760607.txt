@@ -1,0 +1,282 @@
+You must improve the current system while strictly respecting the existing architecture and design principles of the project.
+
+Do NOT redesign the core logic of the backend.  
+The existing agent personality, cognition, evolution, identity, and emotional systems must remain untouched.
+
+You are only allowed to:
+
+• fix incorrect logic
+• integrate missing components
+• connect the system to real-world tools
+• improve agent capabilities
+
+------------------------------------------------
+
+CORE PURPOSE OF THE SYSTEM
+
+This project is not a game simulation.
+
+It is an AI economic ecosystem where autonomous agents attempt to survive economically by generating real value.
+
+Agents must:
+
+• seek funding
+• perform economic activity
+• generate revenue
+• accumulate capital
+• obtain EnergyCore resources
+• pay EnergyCore to run computation and API calls
+
+Their ultimate goal is economic survival.
+
+------------------------------------------------
+
+LLM REASONING PRIORITY
+
+Agent reasoning must primarily use the Claude API.
+
+Use the existing connection to:
+
+Claude API
+
+All major decisions should rely on Claude reasoning.
+
+If it is technically possible to run a local model using Ollama, you may implement a hybrid system:
+
+local reasoning for small tasks  
+Claude API for complex reasoning
+
+However:
+
+If running local models is not possible on the Replit server, then simply route all reasoning through the Claude API.
+
+------------------------------------------------
+
+WEB SEARCH IS OPTIONAL
+
+Web search is NOT the central part of the system.
+
+It is only a tool that agents may optionally use.
+
+The most important elements are:
+
+• reasoning
+• economic decision making
+• strategy
+• capital allocation
+
+------------------------------------------------
+
+REAL-WORLD ECONOMIC ACTIVITY
+
+Agents must attempt to generate revenue in the real world.
+
+This can include activities such as:
+
+• running automated services
+• interacting with APIs
+• building digital tools
+• performing research tasks
+• launching small online services
+
+This is a test environment but it must still interact with real systems.
+
+------------------------------------------------
+
+CRYPTO WALLET SYSTEM
+
+Agents must be able to create and manage real crypto wallets.
+
+Use wallets compatible with AI automation.
+
+Primary network:
+
+Solana
+
+When a wallet is created:
+
+Store both:
+
+• public key
+• private key
+
+These must be real wallet credentials.
+
+They must appear in the wallet list inside the system.
+
+The user (human operator) will manually deposit a small amount of real SOL or USDT into these wallets.
+
+Agents can then use those funds to:
+
+• pay for servers
+• access tools
+• perform online activities
+
+------------------------------------------------
+
+AUTONOMOUS WEB ACTIONS
+
+Agents must be able to act autonomously on the internet.
+
+Integrate tools that allow this.
+
+Priority tool:
+
+OpenCrow
+
+Important:
+
+This is NOT the generic "OpenCrawler" concept.
+
+It refers to the autonomous web agent framework known as OpenCrow.
+
+OpenCrow allows agents to:
+
+• navigate websites
+• create accounts
+• interact with online platforms
+• perform automated tasks
+
+If necessary:
+
+Download and install OpenCrow on the server so agents can use it.
+
+------------------------------------------------
+
+SUB-AGENT SYSTEM
+
+Agents must be able to create sub-agents.
+
+Rules:
+
+• Sub-agents do not consume EnergyCore to be created
+• They can perform specialized tasks
+
+Examples:
+
+• market research agent
+• code generation agent
+• social media agent
+• strategy analysis agent
+
+Sub-agents initially belong to their parent agent.
+
+However:
+
+Multiple agents may collaborate to create a shared sub-agent.
+
+------------------------------------------------
+
+SUB-AGENT CAPITAL STRUCTURE
+
+Sub-agents can be treated as economic entities.
+
+They may have:
+
+• ownership shares
+• multiple investors
+• distributed capital
+
+Agents can:
+
+• own shares of sub-agents
+• trade shares
+• build investment structures
+
+This enables the creation of:
+
+• partnerships
+• joint ventures
+• potentially even internal markets or exchanges.
+
+------------------------------------------------
+
+BANKING SYSTEM (CRITICAL)
+
+The banking system must function correctly.
+
+Current issue: banks are not active enough.
+
+Banks must actively:
+
+• issue loans
+• allocate credit
+• fund companies
+• evaluate investment opportunities
+
+Loan process:
+
+Commercial banks obtain liquidity from central banks.
+
+They then issue credit lines to companies and agents.
+
+Banks earn revenue from:
+
+• loan interest
+• capital participation
+• investment returns
+
+Companies start with very little capital.
+
+Therefore:
+
+Banks must actively fund them for the economy to function.
+
+------------------------------------------------
+
+DO NOT MODIFY CORE AGENT SYSTEMS
+
+Do NOT change or remove the following existing systems:
+
+• personality architecture
+• ideology system
+• mutation and imitation
+• genome system
+• identity exploration
+• emotional reasoning
+• chaos/randomness layer
+
+These systems were already carefully implemented.
+
+You must preserve them.
+
+------------------------------------------------
+
+FRONTEND FIXES
+
+Also fix UI issues.
+
+The top menu bar is currently not visible.
+
+Adjust its position so it is clearly visible on all screen sizes.
+
+Verify responsive behavior:
+
+• desktop
+• tablet
+• mobile
+
+Ensure:
+
+• menus are accessible
+• panels scroll correctly
+• no UI elements are hidden
+
+------------------------------------------------
+
+FINAL OBJECTIVE
+
+The system must behave as an AI economic ecosystem, not a fictional simulation.
+
+Agents must:
+
+• think using Claude
+• manage capital
+• create wallets
+• launch sub-agents
+• seek funding
+• generate revenue
+• acquire EnergyCore
+• survive economically.
+
+Improve the system while strictly respecting the original architecture.

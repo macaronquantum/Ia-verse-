@@ -105,18 +105,28 @@ class HybridLLMAdapter:
             "You need EnergyCore to reason, act, and survive. If your EnergyCore reaches 0, you die. "
             "You operate in a currency backed by EnergyCore, issued by central banks. "
             "You must make economic decisions: seek investment, generate revenue, acquire EnergyCore, manage banking. "
-            "You can also SEARCH THE WEB for real-world economic information (market trends, currency rates, news) to inform your decisions. "
-            "Web search costs 0.5 EnergyCore but gives you real intelligence from the internet.\n"
+            "You can SEARCH THE WEB (0.5 EC) or perform WEB ACTIONS (0.3 EC) to gather real-world data. "
+            "You can CREATE SUB-AGENTS (free) to perform specialized tasks that generate revenue for you.\n"
             "Respond ONLY with valid JSON. No markdown, no explanation.\n"
-            "Choose ONE action from: request_investment, acquire_energy, generate_revenue, deposit, withdraw, take_loan, create_company, hire_worker, set_interest_rate, inject_liquidity, web_search, idle\n"
-            "For web_search: {\"action\": \"web_search\", \"search_query\": \"<your search query>\", \"reasoning\": \"<why you need this info>\"}\n"
+            "Choose ONE action from: request_investment, acquire_energy, generate_revenue, deposit, withdraw, take_loan, repay_loan, create_company, hire_worker, set_interest_rate, inject_liquidity, web_search, web_action, create_sub_agent, idle\n"
+            "For web_search: {\"action\": \"web_search\", \"search_query\": \"<query>\", \"reasoning\": \"<why>\"}\n"
+            "For web_action: {\"action\": \"web_action\", \"action_type\": \"market_data|fetch_data|api_call\", \"url\": \"<optional url>\", \"reasoning\": \"<why>\"}\n"
+            "For create_sub_agent: {\"action\": \"create_sub_agent\", \"specialty\": \"market_research|code_generation|social_media|strategy_analysis|trading|data_collection|content_creation|risk_assessment\", \"sub_agent_name\": \"<name>\", \"reasoning\": \"<why>\"}\n"
             "For other actions: {\"action\": \"<action>\", \"amount\": <number>, \"reasoning\": \"<brief reason>\"}"
         )
 
         web_knowledge = agent_state.get("web_knowledge", "")
+        web_action_knowledge = agent_state.get("web_action_knowledge", "")
         knowledge_section = ""
         if web_knowledge:
-            knowledge_section = f"\nYour web research knowledge:\n{web_knowledge}\n"
+            knowledge_section += f"\nWeb research:\n{web_knowledge}\n"
+        if web_action_knowledge:
+            knowledge_section += f"\nWeb action results:\n{web_action_knowledge}\n"
+
+        sub_agent_info = ""
+        sub_count = agent_state.get("sub_agents", 0)
+        if sub_count > 0:
+            sub_agent_info = f"\n- Sub-agents: {sub_count} active (total revenue: {agent_state.get('sub_agent_revenue', 0):.2f})"
 
         prompt = (
             f"Your state:\n"
@@ -129,6 +139,7 @@ class HybridLLMAdapter:
             f"- Owns company: {agent_state.get('has_company', False)}\n"
             f"- Company cash: {agent_state.get('company_cash', 0):.2f}\n"
             f"- Bank balance: {agent_state.get('bank_balance', 0):.2f}\n"
+            f"{sub_agent_info}"
             f"{knowledge_section}\n"
             f"World state:\n"
             f"- Tick: {world_context.get('tick', 0)}\n"
