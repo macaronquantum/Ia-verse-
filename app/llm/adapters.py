@@ -86,6 +86,18 @@ class HybridLLMAdapter:
 
         return asyncio.run(self.decide_action_async(agent_state, world_context, prompt_metadata))
 
+
+    async def complete(self, prompt: str, depth: float = 0.0) -> tuple[str, bool]:
+        used_external = depth > 0.8
+        if used_external:
+            resp = await self._call_external(prompt, request_id=str(uuid.uuid4()))
+            return resp.get("text", ""), True
+        try:
+            local = await self.local_runtime.infer(prompt, model=settings.LOCAL_MODELS[0]["name"], max_tokens=64, temperature=0.2, timeout=settings.LOCAL_MODEL_TIMEOUT)
+            return local.get("text", "local"), False
+        except Exception:
+            return f"local-fallback:{prompt[:80]}", False
+
     def generate(self, prompt: str, system: str = "") -> LLMResult:
         return LLMResult(text=f"hybrid:{prompt[:120]}", tokens=max(1, len(prompt) // 8))
 

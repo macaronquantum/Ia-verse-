@@ -23,9 +23,9 @@ def run_daily_settlement(receipt_dir: str = "receipts") -> dict:
     return receipt
 
 
-def run_settlement(transfers: list | None = None, dev_mode: bool = False) -> dict:
+def run_settlement(transfers: list | None = None, dev_mode: bool = False):
     if dev_mode:
-        return {"status": "dev_ok", "transfers": transfers or []}
+        return [{"ok": True, **(t or {})} for t in (transfers or [])]
     return run_daily_settlement()
 
 

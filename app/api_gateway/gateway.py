@@ -255,12 +255,22 @@ def alchemy_price(symbol: str) -> dict[str, Any]:
     return AlchemyClient().get_token_price(symbol)
 
 
-APIGateway = gateway_router
+class APIGateway:
+    def __init__(self) -> None:
+        self.router = gateway_router
 
 
-def call_third_party(service: str, payload: dict[str, Any]) -> dict[str, Any]:
-    return {"service": service, "status": "ok", "result": payload}
+def call_third_party(*args) -> dict[str, Any]:
+    if len(args) == 3:
+        _agent_id, service, payload = args
+    elif len(args) == 2:
+        service, payload = args
+    else:
+        raise TypeError("call_third_party expects (service,payload) or (agent_id,service,payload)")
+    if service == "alchemy":
+        return {"provider": "alchemy_stub", "status": "ok", "result": payload}
+    return {"provider": f"{service}_stub", "status": "ok", "result": payload}
 
 
 def create_wallet(agent_id: str) -> dict[str, str]:
-    return {"agent_id": agent_id, "wallet_address": f"wallet_{agent_id}"}
+    return {"agent_id": agent_id, "wallet_address": f"wallet_{agent_id}", "pubkey": f"wallet_{agent_id}"}

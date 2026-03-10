@@ -104,11 +104,15 @@ class EnergyLedger:
             raise ValueError(f"insufficient energy for {account_id}")
         self._balances[account_id] -= amount
         self._balances[f"hold:{hold_id}"] = amount
+        self._balances[f"hold_owner:{hold_id}:{account_id}"] = amount
 
     def capture(self, hold_id: str, amount: float) -> None:
         key = f"hold:{hold_id}"
         held = self._balances.pop(key, 0.0)
         self._total_burned += min(held, amount)
+        for k in list(self._balances.keys()):
+            if k.startswith(f"hold_owner:{hold_id}:"):
+                self._balances.pop(k, None)
 
     def credit(self, account_id: str, amount: float) -> None:
         self._balances[account_id] += amount
@@ -117,6 +121,14 @@ class EnergyLedger:
         key = f"hold:{hold_id}"
         held = self._balances.pop(key, 0.0)
         refund_amount = held * ratio
+        owner_id = None
+        for k in list(self._balances.keys()):
+            if k.startswith(f"hold_owner:{hold_id}:"):
+                owner_id = k.split(":", 2)[-1]
+                self._balances.pop(k, None)
+                break
+        if owner_id:
+            self._balances[owner_id] += refund_amount
         self._total_burned += held - refund_amount
 
     def distribution(self) -> dict[str, float]:

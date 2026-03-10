@@ -101,6 +101,9 @@ class Registry:
     def get_tool(self, tool_id: str) -> ToolRecord:
         return self.tools[tool_id]
 
+    def get(self, tool_id: str) -> ToolManifest:
+        return self.get_tool(tool_id).manifest
+
     def log_usage(
         self,
         *,

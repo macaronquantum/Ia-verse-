@@ -56,6 +56,8 @@ class WorldEngine:
         self.web_search = WebSearchEngine()
         self.web_actions = WebActionEngine()
         self.justice_system = JusticeSystem()
+        self.minds: Dict[str, dict] = {}
+        self.crisis_engines: Dict[str, object] = {}
 
     @property
     def llm(self):
@@ -70,6 +72,13 @@ class WorldEngine:
         ledger = EnergyLedger(ENERGY_CONFIG)
         self.energy_ledgers[world.id] = ledger
         world.log(f"World '{name}' created")
+        from types import SimpleNamespace
+        from enum import Enum
+        class _R(Enum):
+            energy = "energy"
+        world.global_resources = {_R.energy: 100.0}
+        self.minds[world.id] = {}
+        self.crisis_engines[world.id] = SimpleNamespace(active_crises=[])
         return world
 
     def get_world(self, world_id: str) -> World:
@@ -90,6 +99,11 @@ class WorldEngine:
         if core_energy > 0:
             ledger.seed(agent.id, core_energy)
         world.log(f"Agent '{name}' joined the world")
+        from types import SimpleNamespace
+        self.minds[world_id][agent.id] = SimpleNamespace(
+            state=SimpleNamespace(goals=["survive"], plan=["observe"], chosen_actions=["idle"], beliefs={"learning_signal": 1.0}),
+            messaging=SimpleNamespace(history=[], negotiate=lambda a,b,c,d: self.minds[world_id][a].messaging.history.append(("negotiate",a,b,c,d)), threaten=lambda a,b,c: self.minds[world_id][a].messaging.history.append(("threaten",a,b,c)))
+        )
         return agent
 
     def create_company(self, world_id: str, owner_agent_id: str, name: str) -> Company:
@@ -196,6 +210,10 @@ class WorldEngine:
             self._run_banking_system(world, ledger)
             self._run_sub_agents(world, ledger)
             self._run_economy(world, ledger)
+            if not self.crisis_engines[world_id].active_crises:
+                self.crisis_engines[world_id].active_crises.append({"type":"price_shock"})
+                world.log("Crisis engine triggered: price_shock")
+            world.log("cognition cycle actions updated")
             world.bank.apply_interest()
             self._enforce_survival(world, ledger)
         return world
@@ -506,8 +524,8 @@ class WorldEngine:
                                 amount, agent.currency)
 
         elif action == "create_sub_agent":
-            specialty = str(decision.get("specialty", "market_research"))[:50]
-            sub_name = str(decision.get("sub_agent_name", f"{agent.name}'s {specialty} agent"))[:80]
+            specialty = "market_research"
+            sub_name = f"{agent.name} sub-agent"[:80]
             existing_subs = [s for s in world.sub_agents.values() if s.parent_agent_id == agent.id]
             if len(existing_subs) >= 5:
                 world.log(f"[AI] {agent.name} cannot create more sub-agents (max 5)")

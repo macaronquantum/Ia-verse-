@@ -20,6 +20,7 @@ class HumanJob:
     reward: float
     status: str = "posted"
     worker_hash: str = ""
+    hold_id: str = ""
 
 
 class HumanMarketplaceClient:
@@ -38,8 +39,8 @@ class HumanMarketplaceClient:
         decision = self.judge.review_action(agent_id, f"post_job:{description}", reward)
         if not decision.allowed:
             raise ValueError(decision.reason)
-        self.ledger.preauthorize(agent_id, reward)
-        job = HumanJob(id=str(uuid4()), agent_id=agent_id, platform=platform, description=description, reward=reward)
+        hold_id = self.ledger.preauthorize(agent_id, reward)
+        job = HumanJob(id=str(uuid4()), agent_id=agent_id, platform=platform, description=description, reward=reward, hold_id=hold_id)
         self.jobs[job.id] = job
         return job
 
@@ -47,8 +48,8 @@ class HumanMarketplaceClient:
         job = self.jobs[job_id]
         job.worker_hash = sha256(worker_id.encode()).hexdigest()
         if accepted:
-            self.ledger.capture(job.agent_id, job.reward)
+            self.ledger.capture(job.hold_id, job.reward)
             job.status = "paid"
         else:
-            self.ledger.refund(job.agent_id, job.reward)
+            self.ledger.refund(job.hold_id, job.reward)
             job.status = "refunded"

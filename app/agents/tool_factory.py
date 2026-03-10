@@ -1,11 +1,24 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from types import SimpleNamespace
 from uuid import uuid4
 
+from app.api_gateway.gateway import RegisterToolRequest, register_tool
+from app.api_gateway.registry import ToolRegistry
 from app.models import ToolManifest, World
 
 
+@dataclass
+class PublishResult:
+    tool_id: str
+    published: bool
+
+
 class ToolFactory:
+    def __init__(self, registry: ToolRegistry | None = None) -> None:
+        self.registry = registry
+
     def create_tool(self, world: World, agent_id: str, idea: str) -> ToolManifest:
         if not self._lint_check(idea):
             raise ValueError("lint check failed")
@@ -28,6 +41,28 @@ class ToolFactory:
         world.tool_registry[tool.id] = tool
         world.agents_table[agent_id]["created_tools"].append(tool.id)
         return tool
+
+    def build_and_publish(self, agent_id: str, idea: str, price: float = 9.0) -> PublishResult:
+        manifest = {
+            "name": idea,
+            "description": f"auto-generated tool {idea}",
+            "version": "1.0.0",
+            "entrypoint": "echo",
+            "type": "agent_created",
+            "tags": ["auto"],
+            "inputs_schema": {"type": "object"},
+            "outputs_schema": {"type": "object"},
+            "resources": {"cpu_cores": 0.2, "memory_mb": 64, "disk_mb": 64, "timeout_seconds": 2},
+            "cost_core_energy": max(0.0, price / 100),
+            "pricing_model": "per_call",
+            "visibility": "public",
+        }
+        if self.registry is not None:
+            manifest["creator_agent_id"] = agent_id
+            created = self.registry.register_tool(manifest)
+            return PublishResult(tool_id=str(created.id), published=True)
+        out = register_tool(RegisterToolRequest(manifest=manifest), x_agent_id=agent_id, x_role="citizen")
+        return PublishResult(tool_id=out["tool_id"], published=True)
 
     def _lint_check(self, _idea: str) -> bool:
         return True
