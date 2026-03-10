@@ -587,32 +587,36 @@ function renderWallets(list) {
     const color = TYPE_COLORS[w.type] || '#64748b';
     const statusClass = w.alive === false ? 'dead-row' : '';
     const pubKey = w.solana_public_key || w.public_address || '';
-    const privKey = w.solana_private_key || w.private_key || '';
     const network = w.network || 'solana';
     return `<tr class="${statusClass}">
       <td><div class="wallet-agent"><span class="wallet-dot" style="background:${color}"></span>${esc(w.name)}</div></td>
       <td><span class="type-badge" style="background:${color}15;color:${color}">${w.type.replace('_', ' ')}</span></td>
-      <td>${w.currency}</td>
-      <td class="num">${w.wallet_balance.toFixed(2)}</td>
-      <td class="num">${w.bank_balance.toFixed(2)}</td>
+      <td>${w.network || 'solana'}</td>
+      <td class="num">${(w.balance || 0).toFixed(2)}</td>
+      <td class="num">0.00</td>
       <td class="num">${w.core_energy.toFixed(2)}</td>
       <td><code class="addr" title="${esc(pubKey)}">${pubKey.substring(0, 8)}...${pubKey.slice(-6)}</code><span class="network-tag">${network}</span></td>
-      <td><button class="reveal-btn" onclick="revealKey(this, '${esc(privKey)}')">Reveal</button></td>
+      <td><button class="reveal-btn" onclick="revealKey('${w.wallet_id}','${w.agent_id}')">Reveal private key (audit + passphrase)</button></td>
     </tr>`;
   }).join('');
 }
 
-function revealKey(btn, key) {
-  const td = btn.parentElement;
-  if (btn.textContent === 'Reveal') {
-    td.innerHTML = `<code class="pk-revealed">${key.substring(0, 12)}...${key.slice(-8)}</code>
-      <button class="reveal-btn hide-btn" onclick="hideKey(this, '${key}')">Hide</button>`;
+async function revealKey(walletId, agentId) {
+  const confirmation = prompt('Security warning: type "I understand" to reveal private key once.');
+  if (confirmation !== 'I understand') return;
+  const passphrase = prompt('Enter operator passphrase to decrypt this key:');
+  if (!passphrase) return;
+  const res = await fetch(`/api/wallets/${walletId}/reveal`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({agent_id: agentId, passphrase, confirmation})
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.detail || 'Reveal failed');
+    return;
   }
-}
-
-function hideKey(btn, key) {
-  const td = btn.parentElement;
-  td.innerHTML = `<button class="reveal-btn" onclick="revealKey(this, '${key}')">Reveal</button>`;
+  alert(`Private key (expires in-memory): ${data.private_key}`);
 }
 
 async function fetchTransactions() {

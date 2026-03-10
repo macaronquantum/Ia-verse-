@@ -1,0 +1,45 @@
+services:
+  api:
+    build: .
+    environment:
+      WALLET_MASTER_KEY: ${WALLET_MASTER_KEY:-dev-master-key-change-me}
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/iaverse}
+      MODEL_CACHE_DIR: /var/models
+      MODEL_MAX_CONCURRENCY: 4
+      EXTERNAL_DECISION_RATE: 0.10
+      LOCAL_MODEL_TIMEOUT: 20
+      EXTERNAL_MODEL_TIMEOUT: 60
+      ALLOW_PRIVATE_KEY_FRONTEND: "false"
+    volumes:
+      - ./models:/var/models
+    ports:
+      - "8000:8000"
+    depends_on: [redis, postgres]
+  workers:
+    build: .
+    command: ["python3.11", "run_worker.py"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      WORKER_COUNT: 4
+      MODEL_CACHE_DIR: /var/models
+    volumes:
+      - ./models:/var/models
+    depends_on: [redis]
+  model-downloader:
+    build: .
+    command: ["python3.11", "scripts/download_models.py", "--all"]
+    volumes:
+      - ./models:/var/models
+  redis:
+    image: redis:7-alpine
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: iaverse
+  vllm:
+    build: .
+    command: ["bash", "scripts/run_vllm_server.sh"]
+    volumes:
+      - ./models:/var/models

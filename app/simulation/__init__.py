@@ -10,6 +10,8 @@ from app.models import Agent, Company, World, SubAgent, SUB_AGENT_SPECIALTIES
 from app.energy.core import EnergyLedger, EnergyConfig
 from app.web_search import WebSearchEngine, SEARCH_ENERGY_COST
 from app.web_actions import WebActionEngine, WEB_ACTION_ENERGY_COST
+from app.config import settings
+from app.justice.system import JusticeSystem
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +55,7 @@ class WorldEngine:
         self._llm = None
         self.web_search = WebSearchEngine()
         self.web_actions = WebActionEngine()
+        self.justice_system = JusticeSystem()
 
     @property
     def llm(self):
@@ -288,7 +291,7 @@ class WorldEngine:
 
         import random as _rand
         alive_agents = [a for a in world.agents.values() if a.alive]
-        max_ai_per_tick = 10
+        max_ai_per_tick = settings.ACTIVE_AGENTS_PER_TICK
         if len(alive_agents) > max_ai_per_tick:
             ai_agents = _rand.sample(alive_agents, max_ai_per_tick)
         else:
@@ -363,6 +366,13 @@ class WorldEngine:
                 amount = 1.0
 
             search_query = str(decision.get("search_query", ""))[:200]
+
+            review = self.justice_system.review_action(agent, {"action": action, "reasoning": reasoning})
+            if review.result in {"sanction", "ban"}:
+                world.log(f"[JUDGE] action blocked for {agent.name}: {review.reason}")
+                if review.result == "ban":
+                    agent.alive = False
+                continue
 
             try:
                 self._execute_agent_action(world, ledger, agent, company, action, reasoning, amount, search_query=search_query)

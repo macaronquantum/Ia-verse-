@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import logging
 import time
-import requests
+try:
+    import requests
+except Exception:
+    requests = None
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -24,6 +27,9 @@ class WebActionResult:
 class WebActionEngine:
     def __init__(self) -> None:
         self._agent_actions: dict[str, list[WebActionResult]] = {}
+        if requests is None:
+            self._session = None
+            return
         self._session = requests.Session()
         self._session.headers.update({
             "User-Agent": "IA-Verse-Agent/1.0 (Autonomous Economic Agent)"
@@ -32,6 +38,9 @@ class WebActionEngine:
     def perform_action(self, agent_id: str, action_type: str, url: str, tick: int, params: dict = None) -> WebActionResult:
         result_data = {}
         status = "failed"
+
+        if self._session is None:
+            return WebActionResult(action_type=action_type, url=url[:200], status="failed", data={"error": "requests dependency unavailable"}, tick=tick)
 
         try:
             if action_type == "fetch_data":

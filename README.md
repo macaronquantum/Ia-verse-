@@ -89,3 +89,24 @@ python -m pytest -q
 - Sandbox runner isolé avec timeouts + limites ressources.
 - Logs d’usage tamper-evident (chaîne SHA256).
 - Quotas per-agent per-tool + pénalité réputation.
+
+## Hybrid local LLM runtime (GPU)
+
+### Key env vars
+- `LOCAL_MODELS`, `MODEL_CACHE_DIR`, `MODEL_MAX_CONCURRENCY`
+- `EXTERNAL_DECISION_RATE` (default `0.10`), `LOCAL_MODEL_TIMEOUT`, `EXTERNAL_MODEL_TIMEOUT`
+- `ACTIVE_AGENTS_PER_TICK`, `WORKER_COUNT`
+- `WALLET_MASTER_KEY`, `OPERATOR_PASSPHRASE`, `ALLOW_PRIVATE_KEY_FRONTEND` (default `false`)
+
+### Deployment on NVIDIA server
+1. Install NVIDIA drivers (manual EULA acceptance step).
+2. Install Docker + NVIDIA container toolkit.
+3. `cp .env.example .env` and configure keys.
+4. `./scripts/download_models.py --all`
+5. `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build`
+
+### Security notes
+- Wallet private keys are encrypted at rest with AES-GCM.
+- Frontend only shows public key by default.
+- Private key reveal is explicit opt-in and audited.
+- Prefer HSM/remote signer for production.
