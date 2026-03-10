@@ -19,6 +19,8 @@ import hashlib
 from app.models import COUNTRY_COORDS, COUNTRIES, SYSTEM_CURRENCIES
 from app.simulation import WorldEngine
 from app.crypto.solana_wallet import SolanaWalletManager
+from app.wallets.manager import WalletManager
+from app.config import settings
 
 
 app = FastAPI(title="IA-Verse Backend", version="1.0.0")
@@ -27,6 +29,7 @@ app.include_router(monitoring_router)
 app.include_router(gateway_router)
 engine = WorldEngine()
 solana_wallets = SolanaWalletManager()
+wallet_manager = WalletManager()
 
 _auto_sim_task: Optional[asyncio.Task] = None
 _auto_sim_speed: float = 5.0
@@ -77,6 +80,13 @@ class RepayRequest(BaseModel):
     owner_id: str
     loan_id: str
     amount: float = Field(gt=0)
+
+
+class RevealWalletRequest(BaseModel):
+    agent_id: str
+    passphrase: str
+    confirmation: str
+
 
 
 @app.get("/health")
@@ -344,7 +354,7 @@ def _generate_wallet_keys(agent_id: str) -> dict:
 
 
 @app.get("/api/wallets")
-def get_wallets() -> dict:
+def get_wallets(agent_id: str | None = None) -> dict:
     global _active_world_id
     wid = _active_world_id or (list(engine.worlds.keys())[-1] if engine.worlds else None)
     if not wid or wid not in engine.worlds:
@@ -353,25 +363,38 @@ def get_wallets() -> dict:
     ledger = engine.get_ledger(wid)
     wallets = []
     for a in world.agents.values():
-        energy = ledger.balance_of(a.id)
-        bank_acct = world.bank.accounts.get(a.id)
-        sol_wallet = solana_wallets.get_or_create(a.id)
+        if agent_id and a.id != agent_id:
+            continue
+        if not [w for w in wallet_manager.list_wallets(a.id)]:
+            wallet_manager.create_wallet(a.id, network="solana")
+        wallet = wallet_manager.list_wallets(a.id)[0]
         wallets.append({
-            "id": a.id,
+            "wallet_id": wallet["wallet_id"],
+            "agent_id": a.id,
             "name": a.name,
-            "type": a.agent_type,
-            "currency": a.currency,
-            "wallet_balance": round(a.wallet, 2),
-            "bank_balance": round(bank_acct.balance, 2) if bank_acct else 0.0,
-            "core_energy": round(energy, 2),
-            "total_value": round(a.wallet + energy * world.energy_price, 2),
-            "alive": a.alive,
-            "solana_public_key": sol_wallet.public_key if sol_wallet else None,
-            "solana_private_key": sol_wallet.private_key if sol_wallet else None,
-            "network": "solana",
+            "public_key": wallet["public_key"],
+            "network": wallet["network"],
+            "balance": round(a.wallet, 2),
+            "core_energy": round(ledger.balance_of(a.id), 2),
         })
-    wallets.sort(key=lambda w: w["total_value"], reverse=True)
-    return {"wallets": wallets, "tick": world.tick_count}
+    return {"wallets": wallets, "tick": world.tick_count, "allow_private_key_frontend": settings.ALLOW_PRIVATE_KEY_FRONTEND}
+
+
+@app.post("/api/wallets/{wallet_id}/reveal")
+def reveal_wallet_private_key(wallet_id: str, payload: RevealWalletRequest) -> dict:
+    if payload.confirmation.strip() != "I understand":
+        raise HTTPException(status_code=400, detail="confirmation text mismatch")
+    if not settings.ALLOW_PRIVATE_KEY_FRONTEND:
+        raise HTTPException(status_code=403, detail="private key reveal disabled")
+    try:
+        private_key = wallet_manager.export_private_key(payload.agent_id, wallet_id, payload.passphrase)
+        return {"wallet_id": wallet_id, "private_key": private_key, "expires_in_seconds": 60}
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 
 
 @app.get("/api/transactions")

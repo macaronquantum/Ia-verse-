@@ -18,6 +18,14 @@ def _env_int(name: str, default: int) -> int:
     return int(raw) if raw is not None else default
 
 
+def _env_json(name: str, default):
+    raw = os.getenv(name)
+    if not raw:
+        return default
+    import json
+    return json.loads(raw)
+
+
 @dataclass
 class Settings:
     TICK_SECONDS: int = field(default_factory=lambda: _env_int("TICK_SECONDS", 5))
@@ -37,6 +45,19 @@ class Settings:
     DEV_ALLOW_MINT: bool = field(default_factory=lambda: _env_bool("DEV_ALLOW_MINT", False))
     MINT_PRIVATE_KEY: str = field(default_factory=lambda: os.getenv("MINT_PRIVATE_KEY", ""))
     marketplace_fee_percent: float = field(default_factory=lambda: _env_float("MARKETPLACE_FEE", 0.10))
+    LOCAL_MODELS: list[dict] = field(default_factory=lambda: _env_json("LOCAL_MODELS", [
+        {"name": "mistral-7b", "source": "hf", "repo": "mistralai/Mistral-7B-Instruct", "quant": "4bit", "device": "cuda:0", "backend": "vllm"},
+        {"name": "mixtral-8x7b", "source": "hf", "repo": "mixtral/...", "quant": "4bit", "device": "cuda:0", "backend": "vllm"},
+        {"name": "olmo-hybrid-7b", "source": "hf", "repo": "allenai/OLMo-2-1124-7B-Instruct", "quant": "4bit", "device": "cuda:0", "backend": "vllm"},
+    ]))
+    MODEL_CACHE_DIR: str = field(default_factory=lambda: os.getenv("MODEL_CACHE_DIR", "/var/models"))
+    MODEL_MAX_CONCURRENCY: int = field(default_factory=lambda: _env_int("MODEL_MAX_CONCURRENCY", 4))
+    EXTERNAL_DECISION_RATE: float = field(default_factory=lambda: _env_float("EXTERNAL_DECISION_RATE", 0.10))
+    LOCAL_MODEL_TIMEOUT: int = field(default_factory=lambda: _env_int("LOCAL_MODEL_TIMEOUT", 20))
+    EXTERNAL_MODEL_TIMEOUT: int = field(default_factory=lambda: _env_int("EXTERNAL_MODEL_TIMEOUT", 60))
+    ACTIVE_AGENTS_PER_TICK: int = field(default_factory=lambda: _env_int("ACTIVE_AGENTS_PER_TICK", 200))
+    WORKER_COUNT: int = field(default_factory=lambda: _env_int("WORKER_COUNT", 4))
+    ALLOW_PRIVATE_KEY_FRONTEND: bool = field(default_factory=lambda: _env_bool("ALLOW_PRIVATE_KEY_FRONTEND", False))
 
 
 settings = Settings()

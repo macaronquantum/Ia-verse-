@@ -3,7 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.energy.core import EnergyLedger
-from app.justice.system import JusticeSystem
+from app.justice.system import JusticeSystem, StatePolicy
+
+
+@dataclass
+class StateEntity:
+    name: str
+    tax_rate: float
+    entry_cost: float
+
+    def to_policy(self) -> StatePolicy:
+        return StatePolicy(name=self.name, tax_rate=self.tax_rate, entry_cost=self.entry_cost)
 
 
 @dataclass
