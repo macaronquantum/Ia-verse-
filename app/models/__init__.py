@@ -225,6 +225,34 @@ class Bank:
 
 
 @dataclass
+class Transaction:
+    id: str = field(default_factory=lambda: str(uuid4()))
+    tick: int = 0
+    tx_type: str = ""
+    from_id: str = ""
+    from_name: str = ""
+    to_id: str = ""
+    to_name: str = ""
+    amount: float = 0.0
+    currency: str = ""
+    details: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "tick": self.tick,
+            "type": self.tx_type,
+            "from_id": self.from_id,
+            "from_name": self.from_name,
+            "to_id": self.to_id,
+            "to_name": self.to_name,
+            "amount": round(self.amount, 2),
+            "currency": self.currency,
+            "details": self.details,
+        }
+
+
+@dataclass
 class World:
     id: str
     name: str
@@ -237,9 +265,23 @@ class World:
     total_energy_burned: float = 0.0
     currencies: Dict[str, str] = field(default_factory=lambda: dict(SYSTEM_CURRENCIES))
     event_log: List[str] = field(default_factory=list)
+    transactions: List[Transaction] = field(default_factory=list)
 
     def log(self, message: str) -> None:
         self.event_log.append(f"[tick {self.tick_count}] {message}")
+
+    def record_tx(self, tx_type: str, from_id: str, from_name: str,
+                  to_id: str, to_name: str, amount: float,
+                  currency: str = "", details: Optional[Dict] = None) -> Transaction:
+        tx = Transaction(
+            tick=self.tick_count, tx_type=tx_type,
+            from_id=from_id, from_name=from_name,
+            to_id=to_id, to_name=to_name,
+            amount=amount, currency=currency,
+            details=details or {},
+        )
+        self.transactions.append(tx)
+        return tx
 
 
 @dataclass

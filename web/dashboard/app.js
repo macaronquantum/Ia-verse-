@@ -4,8 +4,13 @@ let selectedAgentId = null;
 let map = null;
 let agentMarkers = [];
 let pollTimer = null;
+let walletsData = [];
+let transactionsData = [];
+let currentView = 'map';
+let simRunning = false;
 
 function switchView(name) {
+  currentView = name;
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
@@ -14,6 +19,8 @@ function switchView(name) {
   if (name === 'map' && map) map.invalidateSize();
   if (name === 'agents') fetchAgents();
   if (name === 'economy') fetchEconomy();
+  if (name === 'wallets') fetchWallets();
+  if (name === 'transactions') fetchTransactions();
 }
 
 function esc(s) {
@@ -39,23 +46,26 @@ const TYPE_COLORS = {
   judge: '#7c3aed', energy_provider: '#ea580c', trader: '#0891b2', citizen: '#64748b'
 };
 
+const TX_COLORS = {
+  deposit: '#2563eb', withdraw: '#ea580c', loan_issued: '#7c3aed',
+  loan_repaid: '#16a34a', acquire_energy: '#0891b2', energy_burn: '#dc2626',
+  revenue: '#16a34a', labor_income: '#64748b', dividend: '#ca8a04',
+  company_create: '#6366f1', investment: '#2563eb', liquidity_injection: '#7c3aed',
+  interest_rate_change: '#dc2626'
+};
+
 function initMap() {
   map = L.map('map-container', {
     center: [20, 0], zoom: 2.5, minZoom: 2, maxZoom: 8,
-    zoomControl: false, attributionControl: false,
-    worldCopyJump: true,
+    zoomControl: false, attributionControl: false, worldCopyJump: true,
   });
-
   L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
     subdomains: 'abcd', maxZoom: 19,
   }).addTo(map);
-
   L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', {
     subdomains: 'abcd', maxZoom: 19, pane: 'overlayPane',
   }).addTo(map);
-
   L.control.zoom({ position: 'topright' }).addTo(map);
-
   map.on('click', () => {
     document.getElementById('agent-popup').classList.add('hidden');
   });
@@ -65,7 +75,6 @@ function updateMapAgents(agents) {
   agentMarkers.forEach(m => map.removeLayer(m));
   agentMarkers = [];
   if (!agents || !agents.length) return;
-
   agents.forEach(a => {
     if (!a.lat && !a.lng) return;
     const color = TYPE_COLORS[a.type] || '#64748b';
@@ -77,7 +86,6 @@ function updateMapAgents(agents) {
       html: `<div style="width:${r*2}px;height:${r*2}px;border-radius:50%;background:${color};opacity:${opacity};border:2px solid rgba(255,255,255,0.8);box-shadow:0 1px 4px rgba(0,0,0,0.2);"></div>`,
       iconSize: [r*2, r*2], iconAnchor: [r, r],
     });
-
     const marker = L.marker([a.lat, a.lng], { icon }).addTo(map);
     marker.on('click', () => showAgentPopup(a, marker));
     agentMarkers.push(marker);
@@ -119,7 +127,7 @@ async function fetchState() {
     state = data;
     updateStatus(data);
     updateMiniStats(data);
-    updateMapAgents(data.agents || []);
+    if (currentView === 'map') updateMapAgents(data.agents || []);
     updateFeed();
   } catch (e) { console.warn('state fetch failed', e); }
 }
@@ -128,27 +136,37 @@ function updateStatus(d) {
   const dot = document.getElementById('status-dot');
   const label = document.getElementById('status-label');
   const tick = document.getElementById('tick-label');
-  const start = document.getElementById('btn-start');
-  const pause = document.getElementById('btn-pause');
+  const toggleBtn = document.getElementById('btn-toggle');
+  const toggleIcon = document.getElementById('toggle-icon');
+  const toggleLabel = document.getElementById('toggle-label');
 
   if (!d.active) {
     dot.className = 'status-dot offline';
     label.textContent = 'No world';
     tick.textContent = 'Tick 0';
-    start.classList.remove('active');
-    pause.classList.remove('active');
+    simRunning = false;
   } else if (d.running) {
     dot.className = 'status-dot running';
     label.textContent = 'Running';
     tick.textContent = 'Tick ' + d.tick;
-    start.classList.add('active');
-    pause.classList.remove('active');
+    simRunning = true;
   } else {
     dot.className = 'status-dot online';
     label.textContent = 'Paused';
     tick.textContent = 'Tick ' + d.tick;
-    start.classList.remove('active');
-    pause.classList.remove('active');
+    simRunning = false;
+  }
+
+  if (simRunning) {
+    toggleBtn.classList.add('stop');
+    toggleBtn.classList.remove('run');
+    toggleIcon.className = 'toggle-icon stop-icon';
+    toggleLabel.textContent = 'Stop';
+  } else {
+    toggleBtn.classList.remove('stop');
+    toggleBtn.classList.add('run');
+    toggleIcon.className = 'toggle-icon play-icon';
+    toggleLabel.textContent = 'Run';
   }
 }
 
@@ -182,6 +200,10 @@ async function fetchAgents() {
     agentsData = data.agents || [];
     document.getElementById('agent-count-badge').textContent = agentsData.length;
     renderAgentList(agentsData);
+    if (selectedAgentId) {
+      const exists = agentsData.find(a => a.id === selectedAgentId);
+      if (exists) selectAgent(selectedAgentId);
+    }
   } catch (e) { console.warn('agents fetch failed', e); }
 }
 
@@ -189,19 +211,16 @@ function filterAgents() {
   const q = document.getElementById('agent-search').value.toLowerCase();
   const type = document.getElementById('agent-type-filter').value;
   const sort = document.getElementById('agent-sort').value;
-
   let list = agentsData.filter(a => {
     if (q && !a.name.toLowerCase().includes(q)) return false;
     if (type !== 'all' && a.type !== type) return false;
     return true;
   });
-
   if (sort === 'name') list.sort((a, b) => a.name.localeCompare(b.name));
   else if (sort === 'wallet') list.sort((a, b) => b.wallet - a.wallet);
   else if (sort === 'core_energy') list.sort((a, b) => (b.core_energy || 0) - (a.core_energy || 0));
   else if (sort === 'total_value') list.sort((a, b) => (b.total_value || 0) - (a.total_value || 0));
   else list.sort((a, b) => b.influence - a.influence);
-
   renderAgentList(list);
 }
 
@@ -223,55 +242,279 @@ function renderAgentList(list) {
   }).join('');
 }
 
+let agentProfileCache = null;
+
 async function selectAgent(id) {
   selectedAgentId = id;
   document.querySelectorAll('.agent-item').forEach(el => el.classList.remove('active'));
-  const items = document.querySelectorAll('.agent-item');
-  items.forEach(el => { if (el.getAttribute('onclick')?.includes(id)) el.classList.add('active'); });
-
+  document.querySelectorAll('.agent-item').forEach(el => {
+    if (el.getAttribute('onclick')?.includes(id)) el.classList.add('active');
+  });
+  const panel = document.getElementById('agent-profile');
+  panel.classList.add('fade-out');
   try {
     const a = await api(`/api/agents/${id}`);
-    renderAgentProfile(a);
+    agentProfileCache = a;
+    setTimeout(() => {
+      renderAgentProfile(a, 'overview');
+      panel.classList.remove('fade-out');
+      panel.classList.add('fade-in');
+      setTimeout(() => panel.classList.remove('fade-in'), 300);
+    }, 150);
   } catch (e) { console.warn('profile load failed', e); }
 }
 
-function renderAgentProfile(a) {
+function switchProfileTab(tab) {
+  if (!agentProfileCache) return;
+  document.querySelectorAll('.profile-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.profile-tab[data-tab="${tab}"]`)?.classList.add('active');
+  renderProfileContent(agentProfileCache, tab);
+}
+
+function renderAgentProfile(a, tab = 'overview') {
   const el = document.getElementById('agent-profile');
   const color = TYPE_COLORS[a.type] || '#64748b';
-  const wh = a.wealth_history || [];
-  const maxW = Math.max(1, ...wh);
-  const bars = wh.slice(-30).map(w => `<div class="wealth-bar" style="height:${Math.max(2, (w / maxW) * 100)}%;background:${color};"></div>`).join('');
-  const logs = (a.decision_log || []).slice(-10).map(l => `<div class="log-item">${esc(l)}</div>`).join('');
   const statusBadge = a.alive === false ? '<span class="dead-badge">INACTIVE</span>' : '';
 
   el.innerHTML = `
     <div class="profile-header" style="border-left:4px solid ${color}">
       <h2>${esc(a.name)} ${statusBadge}</h2>
-      <div class="profile-type">${a.type.replace('_', ' ')} · ${a.country}</div>
+      <div class="profile-type">${a.type.replace('_', ' ')} · ${a.country} · ${a.currency || 'USC'}</div>
     </div>
-    <div class="profile-grid">
-      <div class="profile-stat"><span class="profile-label">Currency Balance</span><span class="profile-value">${a.wallet.toFixed(2)} ${a.currency || 'USC'}</span></div>
-      <div class="profile-stat"><span class="profile-label">EnergyCore</span><span class="profile-value">${(a.core_energy || 0).toFixed(2)}</span></div>
-      <div class="profile-stat"><span class="profile-label">Total Value</span><span class="profile-value">${fmt(a.total_value || 0)}</span></div>
-      <div class="profile-stat"><span class="profile-label">Influence</span><span class="profile-value">${a.influence}</span></div>
-      <div class="profile-stat"><span class="profile-label">Risk</span><span class="profile-value">${a.risk}%</span></div>
-      <div class="profile-stat"><span class="profile-label">Bank Balance</span><span class="profile-value">${(a.bank_balance || 0).toFixed(2)}</span></div>
-      <div class="profile-stat"><span class="profile-label">Ideology</span><span class="profile-value">${a.ideology || '-'}</span></div>
-      <div class="profile-stat"><span class="profile-label">Personality</span><span class="profile-value">${a.personality}</span></div>
+    <div class="profile-tabs">
+      <button class="profile-tab ${tab === 'overview' ? 'active' : ''}" data-tab="overview" onclick="switchProfileTab('overview')">Overview</button>
+      <button class="profile-tab ${tab === 'transactions' ? 'active' : ''}" data-tab="transactions" onclick="switchProfileTab('transactions')">Transactions</button>
+      <button class="profile-tab ${tab === 'loans' ? 'active' : ''}" data-tab="loans" onclick="switchProfileTab('loans')">Loans</button>
+      <button class="profile-tab ${tab === 'actions' ? 'active' : ''}" data-tab="actions" onclick="switchProfileTab('actions')">Actions</button>
     </div>
-    ${a.company ? `<div class="profile-company">
-      <h4>Company: ${esc(a.company.name)}</h4>
-      <span>Cash: ${a.company.cash.toFixed(2)} · Productivity: ${a.company.productivity.toFixed(2)}</span>
-    </div>` : ''}
-    <div class="wealth-chart-container">
-      <h4>Wealth History</h4>
-      <div class="wealth-chart">${bars}</div>
-    </div>
-    <div class="decision-log-container">
-      <h4>Recent Decisions</h4>
-      <div class="decision-log">${logs || '<div class="empty-state">No decisions yet</div>'}</div>
-    </div>
+    <div id="profile-content" class="profile-content"></div>
   `;
+  renderProfileContent(a, tab);
+}
+
+function renderProfileContent(a, tab) {
+  const el = document.getElementById('profile-content');
+  if (!el) return;
+  const color = TYPE_COLORS[a.type] || '#64748b';
+
+  if (tab === 'overview') {
+    const wh = a.wealth_history || [];
+    const maxW = Math.max(1, ...wh);
+    const bars = wh.slice(-40).map(w => `<div class="wealth-bar" style="height:${Math.max(2, (w / maxW) * 100)}%;background:${color};"></div>`).join('');
+    el.innerHTML = `
+      <div class="profile-grid">
+        <div class="profile-stat"><span class="profile-label">Wallet</span><span class="profile-value">${a.wallet.toFixed(2)} ${a.currency || 'USC'}</span></div>
+        <div class="profile-stat"><span class="profile-label">EnergyCore</span><span class="profile-value">${(a.core_energy || 0).toFixed(2)}</span></div>
+        <div class="profile-stat"><span class="profile-label">Total Value</span><span class="profile-value">${fmt(a.total_value || 0)}</span></div>
+        <div class="profile-stat"><span class="profile-label">Bank Balance</span><span class="profile-value">${(a.bank_balance || 0).toFixed(2)}</span></div>
+        <div class="profile-stat"><span class="profile-label">Influence</span><span class="profile-value">${a.influence}</span></div>
+        <div class="profile-stat"><span class="profile-label">Risk</span><span class="profile-value">${a.risk}%</span></div>
+        <div class="profile-stat"><span class="profile-label">Ideology</span><span class="profile-value">${a.ideology || '-'}</span></div>
+        <div class="profile-stat"><span class="profile-label">Personality</span><span class="profile-value">${a.personality}</span></div>
+      </div>
+      ${a.company ? `<div class="profile-company">
+        <h4>Company: ${esc(a.company.name)}</h4>
+        <span>Cash: ${a.company.cash.toFixed(2)} · Productivity: ${a.company.productivity.toFixed(2)}</span>
+      </div>` : ''}
+      <div class="wealth-chart-container">
+        <h4>Wealth History</h4>
+        <div class="wealth-chart">${bars || '<div class="empty-state-sm">No history yet</div>'}</div>
+      </div>
+    `;
+  } else if (tab === 'transactions') {
+    const txs = a.transactions || [];
+    if (!txs.length) {
+      el.innerHTML = '<div class="empty-state">No transactions yet</div>';
+      return;
+    }
+    el.innerHTML = `<div class="tx-list-profile">${txs.map(tx => renderTxCard(tx, true)).join('')}</div>`;
+  } else if (tab === 'loans') {
+    const loans = a.loans || [];
+    if (!loans.length) {
+      el.innerHTML = '<div class="empty-state">No active loans</div>';
+      return;
+    }
+    el.innerHTML = `<div class="loans-list">${loans.map(l => `
+      <div class="loan-card">
+        <div class="loan-header">
+          <span class="loan-id">Loan ${l.id.substring(0, 8)}...</span>
+          <span class="loan-status ${l.remaining <= 0 ? 'paid' : 'active'}">${l.remaining <= 0 ? 'Paid' : 'Active'}</span>
+        </div>
+        <div class="loan-details">
+          <div class="loan-detail"><span class="loan-label">Principal</span><span class="loan-val">${l.principal.toFixed(2)}</span></div>
+          <div class="loan-detail"><span class="loan-label">Interest Rate</span><span class="loan-val">${(l.interest_rate * 100).toFixed(1)}%</span></div>
+          <div class="loan-detail"><span class="loan-label">Remaining</span><span class="loan-val ${l.remaining > l.principal ? 'red' : ''}">${l.remaining.toFixed(2)}</span></div>
+          <div class="loan-detail"><span class="loan-label">Accrued Interest</span><span class="loan-val">${Math.max(0, l.remaining - l.principal).toFixed(2)}</span></div>
+        </div>
+      </div>
+    `).join('')}</div>`;
+  } else if (tab === 'actions') {
+    const logs = (a.decision_log || []).slice(-50);
+    if (!logs.length) {
+      el.innerHTML = '<div class="empty-state">No decisions yet</div>';
+      return;
+    }
+    el.innerHTML = `<div class="actions-list">${logs.map(l => {
+      const match = l.match(/\[tick (\d+)\] (\w+): (.+)/);
+      if (match) {
+        const [, tick, action, reason] = match;
+        const actionColor = TX_COLORS[action] || '#64748b';
+        return `<div class="action-item">
+          <div class="action-meta"><span class="action-tick">Tick ${tick}</span><span class="action-type" style="color:${actionColor}">${action}</span></div>
+          <div class="action-reason">${esc(reason)}</div>
+        </div>`;
+      }
+      return `<div class="action-item"><div class="action-reason">${esc(l)}</div></div>`;
+    }).reverse().join('')}</div>`;
+  }
+}
+
+function renderTxCard(tx, compact = false) {
+  const color = TX_COLORS[tx.type] || '#64748b';
+  const typeLabel = tx.type.replace(/_/g, ' ');
+  const details = tx.details || {};
+  let detailsHtml = '';
+
+  if (tx.type === 'loan_issued') {
+    detailsHtml = `
+      <div class="tx-detail-row"><span>Principal</span><span>${details.principal?.toFixed(2) || tx.amount}</span></div>
+      <div class="tx-detail-row"><span>Interest Rate</span><span>${((details.interest_rate || 0) * 100).toFixed(1)}%</span></div>
+      <div class="tx-detail-row"><span>Remaining</span><span>${details.remaining?.toFixed(2) || '-'}</span></div>
+    `;
+  } else if (tx.type === 'loan_repaid') {
+    detailsHtml = `
+      <div class="tx-detail-row"><span>Before</span><span>${details.remaining_before?.toFixed(2) || '-'}</span></div>
+      <div class="tx-detail-row"><span>After</span><span>${details.remaining_after?.toFixed(2) || '-'}</span></div>
+      <div class="tx-detail-row"><span>Fully Repaid</span><span>${details.fully_repaid ? 'Yes' : 'No'}</span></div>
+    `;
+  } else if (tx.type === 'acquire_energy') {
+    detailsHtml = `
+      <div class="tx-detail-row"><span>EC Units</span><span>${tx.amount.toFixed(2)}</span></div>
+      <div class="tx-detail-row"><span>Cost</span><span>${details.cost_currency?.toFixed(2) || '-'} ${details.currency || ''}</span></div>
+      <div class="tx-detail-row"><span>Price/Unit</span><span>${details.price_per_unit || '-'}</span></div>
+    `;
+  } else if (tx.type === 'dividend') {
+    detailsHtml = `
+      <div class="tx-detail-row"><span>Revenue</span><span>${details.revenue?.toFixed(2) || '-'}</span></div>
+      <div class="tx-detail-row"><span>Energy Cost</span><span>${details.energy_cost?.toFixed(2) || '-'} EC</span></div>
+      <div class="tx-detail-row"><span>Productivity</span><span>${details.productivity?.toFixed(2) || '-'}</span></div>
+    `;
+  } else if (tx.type === 'revenue') {
+    detailsHtml = `
+      <div class="tx-detail-row"><span>Total Revenue</span><span>${details.total_revenue?.toFixed(2) || '-'}</span></div>
+      <div class="tx-detail-row"><span>Agent Share</span><span>${((details.agent_share || 0) * 100).toFixed(0)}%</span></div>
+      <div class="tx-detail-row"><span>Company</span><span>${details.company || '-'}</span></div>
+    `;
+  } else if (tx.type === 'interest_rate_change') {
+    detailsHtml = `
+      <div class="tx-detail-row"><span>Old Rate</span><span>${((details.old_rate || 0) * 100).toFixed(1)}%</span></div>
+      <div class="tx-detail-row"><span>New Rate</span><span>${((details.new_rate || 0) * 100).toFixed(1)}%</span></div>
+    `;
+  }
+
+  const hasDetails = detailsHtml.length > 0;
+  const expandClass = hasDetails ? 'expandable' : '';
+
+  return `<div class="tx-card ${expandClass} ${compact ? 'compact' : ''}" onclick="${hasDetails ? 'this.classList.toggle(\"expanded\")' : ''}">
+    <div class="tx-card-header">
+      <span class="tx-badge" style="background:${color}20;color:${color}">${typeLabel}</span>
+      <span class="tx-tick">Tick ${tx.tick}</span>
+    </div>
+    <div class="tx-card-body">
+      <div class="tx-agents">
+        <span class="tx-from">${esc(tx.from_name)}</span>
+        <span class="tx-arrow">&rarr;</span>
+        <span class="tx-to">${esc(tx.to_name)}</span>
+      </div>
+      <span class="tx-amount">${tx.amount.toFixed(2)} ${tx.currency}</span>
+    </div>
+    ${hasDetails ? `<div class="tx-expand-content">${detailsHtml}</div>` : ''}
+  </div>`;
+}
+
+async function fetchWallets() {
+  try {
+    const data = await api('/api/wallets');
+    walletsData = data.wallets || [];
+    renderWallets(walletsData);
+  } catch (e) { console.warn('wallets fetch failed', e); }
+}
+
+function filterWallets() {
+  const q = document.getElementById('wallet-search').value.toLowerCase();
+  const type = document.getElementById('wallet-type-filter').value;
+  let list = walletsData.filter(w => {
+    if (q && !w.name.toLowerCase().includes(q)) return false;
+    if (type !== 'all' && w.type !== type) return false;
+    return true;
+  });
+  renderWallets(list);
+}
+
+function renderWallets(list) {
+  const tbody = document.getElementById('wallets-tbody');
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No wallets found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(w => {
+    const color = TYPE_COLORS[w.type] || '#64748b';
+    const statusClass = w.alive === false ? 'dead-row' : '';
+    return `<tr class="${statusClass}">
+      <td><div class="wallet-agent"><span class="wallet-dot" style="background:${color}"></span>${esc(w.name)}</div></td>
+      <td><span class="type-badge" style="background:${color}15;color:${color}">${w.type.replace('_', ' ')}</span></td>
+      <td>${w.currency}</td>
+      <td class="num">${w.wallet_balance.toFixed(2)}</td>
+      <td class="num">${w.bank_balance.toFixed(2)}</td>
+      <td class="num">${w.core_energy.toFixed(2)}</td>
+      <td><code class="addr">${w.public_address.substring(0, 10)}...${w.public_address.slice(-6)}</code></td>
+      <td><button class="reveal-btn" onclick="revealKey(this, '${w.private_key}')">Reveal</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function revealKey(btn, key) {
+  const td = btn.parentElement;
+  if (btn.textContent === 'Reveal') {
+    td.innerHTML = `<code class="pk-revealed">${key.substring(0, 12)}...${key.slice(-8)}</code>
+      <button class="reveal-btn hide-btn" onclick="hideKey(this, '${key}')">Hide</button>`;
+  }
+}
+
+function hideKey(btn, key) {
+  const td = btn.parentElement;
+  td.innerHTML = `<button class="reveal-btn" onclick="revealKey(this, '${key}')">Reveal</button>`;
+}
+
+async function fetchTransactions() {
+  const txType = document.getElementById('tx-type-filter').value;
+  const url = '/api/transactions' + (txType ? `?tx_type=${txType}` : '');
+  try {
+    const data = await api(url);
+    transactionsData = data.transactions || [];
+    document.getElementById('tx-count').textContent = `${data.total_count || transactionsData.length} transactions`;
+    filterTransactionsLocal();
+  } catch (e) { console.warn('transactions fetch failed', e); }
+}
+
+function filterTransactionsLocal() {
+  const q = document.getElementById('tx-agent-search').value.toLowerCase();
+  let list = transactionsData;
+  if (q) {
+    list = list.filter(tx =>
+      tx.from_name.toLowerCase().includes(q) || tx.to_name.toLowerCase().includes(q)
+    );
+  }
+  renderTransactions(list);
+}
+
+function renderTransactions(list) {
+  const el = document.getElementById('tx-list');
+  if (!list.length) {
+    el.innerHTML = '<div class="empty-state">No transactions found</div>';
+    return;
+  }
+  el.innerHTML = list.slice(0, 100).map(tx => renderTxCard(tx)).join('');
 }
 
 async function fetchEconomy() {
@@ -287,7 +530,6 @@ async function fetchEconomy() {
     document.getElementById('gini-fill').style.width = (data.gini_index * 100) + '%';
     document.getElementById('e-dead').textContent = data.dead_agents || 0;
     document.getElementById('e-reserve').textContent = fmt(data.bank_reserve);
-
     const energyEl = document.getElementById('energy-stats');
     energyEl.innerHTML = `
       <div class="energy-row"><span class="energy-label">EnergyCore Price</span><span class="energy-val">${data.energy_price || 10} per unit</span></div>
@@ -296,13 +538,11 @@ async function fetchEconomy() {
       <div class="energy-row"><span class="energy-label">Bank Interest Rate</span><span class="energy-val">${((data.interest_rate || 0.02) * 100).toFixed(1)}%</span></div>
       <div class="energy-row"><span class="energy-label">Active Loans</span><span class="energy-val">${data.total_loans || 0}</span></div>
     `;
-
     const currEl = document.getElementById('currencies-grid');
     const currencies = data.currencies || {};
     currEl.innerHTML = Object.entries(currencies).map(([code, name]) =>
       `<div class="price-item"><span class="price-name">${code}</span><span class="price-val">${name}</span></div>`
     ).join('');
-
     const lb = document.getElementById('leaderboard');
     const top = data.top_agents || [];
     lb.innerHTML = top.map((a, i) => {
@@ -322,16 +562,13 @@ async function createWorld() {
   await api('/api/simulation/control', { action: 'create_world' });
   fetchState();
 }
-async function startSim() {
-  await api('/api/simulation/control', { action: 'start' });
-  fetchState();
-}
-async function pauseSim() {
-  await api('/api/simulation/control', { action: 'pause' });
-  fetchState();
-}
-async function stopSim() {
-  await api('/api/simulation/control', { action: 'stop' });
+
+async function toggleSim() {
+  if (simRunning) {
+    await api('/api/simulation/control', { action: 'stop' });
+  } else {
+    await api('/api/simulation/control', { action: 'start' });
+  }
   fetchState();
 }
 

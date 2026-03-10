@@ -18,6 +18,8 @@
             <div class="nav-links">
                 <button class="nav-btn active" data-view="map" onclick="switchView('map')">Map</button>
                 <button class="nav-btn" data-view="agents" onclick="switchView('agents')">Agents</button>
+                <button class="nav-btn" data-view="wallets" onclick="switchView('wallets')">Wallets</button>
+                <button class="nav-btn" data-view="transactions" onclick="switchView('transactions')">Transactions</button>
                 <button class="nav-btn" data-view="economy" onclick="switchView('economy')">Economy</button>
             </div>
             <div class="nav-right">
@@ -25,14 +27,9 @@
                     <button class="ctrl-btn" id="btn-create" onclick="createWorld()" title="Create World">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
                     </button>
-                    <button class="ctrl-btn" id="btn-start" onclick="startSim()" title="Start">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                    </button>
-                    <button class="ctrl-btn" id="btn-pause" onclick="pauseSim()" title="Pause">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-                    </button>
-                    <button class="ctrl-btn" id="btn-stop" onclick="stopSim()" title="Stop">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                    <button class="ctrl-btn toggle-btn" id="btn-toggle" onclick="toggleSim()" title="Run / Stop">
+                        <span id="toggle-icon" class="toggle-icon play-icon"></span>
+                        <span id="toggle-label" class="toggle-label">Run</span>
                     </button>
                 </div>
                 <div class="status-pill" id="status-pill">
@@ -95,6 +92,71 @@
                         <div class="empty-state">Select an agent to view details</div>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <div id="view-wallets" class="view">
+            <div class="wallets-page">
+                <div class="page-header-row">
+                    <h2>Agent Wallets</h2>
+                    <div class="filter-row">
+                        <input type="text" id="wallet-search" placeholder="Search by name..." class="input" oninput="filterWallets()">
+                        <select id="wallet-type-filter" class="select" onchange="filterWallets()">
+                            <option value="all">All types</option>
+                            <option value="central_bank">Central Banks</option>
+                            <option value="bank">Banks</option>
+                            <option value="company">Companies</option>
+                            <option value="state">States</option>
+                            <option value="citizen">Citizens</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="wallets-table-wrap">
+                    <table class="wallets-table" id="wallets-table">
+                        <thead>
+                            <tr>
+                                <th>Agent</th>
+                                <th>Type</th>
+                                <th>Currency</th>
+                                <th>Wallet</th>
+                                <th>Bank</th>
+                                <th>EnergyCore</th>
+                                <th>Public Address</th>
+                                <th>Private Key</th>
+                            </tr>
+                        </thead>
+                        <tbody id="wallets-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-transactions" class="view">
+            <div class="transactions-page">
+                <div class="page-header-row">
+                    <h2>Transactions</h2>
+                    <div class="filter-row">
+                        <select id="tx-type-filter" class="select" onchange="fetchTransactions()">
+                            <option value="">All types</option>
+                            <option value="deposit">Deposits</option>
+                            <option value="withdraw">Withdrawals</option>
+                            <option value="loan_issued">Loans Issued</option>
+                            <option value="loan_repaid">Loan Repayments</option>
+                            <option value="acquire_energy">Energy Acquisitions</option>
+                            <option value="energy_burn">Energy Burns</option>
+                            <option value="revenue">Revenue</option>
+                            <option value="labor_income">Labor Income</option>
+                            <option value="dividend">Dividends</option>
+                            <option value="company_create">Company Creation</option>
+                            <option value="investment">Investments</option>
+                            <option value="liquidity_injection">Liquidity Injections</option>
+                            <option value="interest_rate_change">Interest Rate Changes</option>
+                        </select>
+                        <input type="text" id="tx-agent-search" placeholder="Filter by agent..." class="input" oninput="filterTransactionsLocal()">
+                    </div>
+                </div>
+                <div class="tx-count" id="tx-count">0 transactions</div>
+                <div class="tx-list" id="tx-list"></div>
             </div>
         </div>
 

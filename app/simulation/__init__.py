@@ -99,6 +99,8 @@ class WorldEngine:
         owner.company_id = company.id
         world.bank.ensure_account(company.id)
         world.log(f"Company '{name}' created by agent '{owner.name}'")
+        world.record_tx("company_create", owner.id, owner.name, company.id, name, 0, owner.currency,
+                        {"company_name": name, "owner": owner.name})
         return company
 
     def transfer_wallet_to_bank(self, world_id: str, owner_id: str, amount: float) -> None:
@@ -108,30 +110,55 @@ class WorldEngine:
             raise ValueError("insufficient wallet funds")
         self._set_wallet(world, owner_id, balance - amount)
         world.bank.deposit(owner_id, amount)
-        agent_name = world.agents[owner_id].name if owner_id in world.agents else owner_id
+        agent = world.agents.get(owner_id)
+        agent_name = agent.name if agent else owner_id
+        currency = agent.currency if agent else ""
         world.log(f"{agent_name} deposited {amount:.2f}")
+        world.record_tx("deposit", owner_id, agent_name, "bank", "System Bank", amount, currency)
 
     def transfer_bank_to_wallet(self, world_id: str, owner_id: str, amount: float) -> None:
         world = self.get_world(world_id)
         world.bank.withdraw(owner_id, amount)
         self._set_wallet(world, owner_id, self._get_wallet(world, owner_id) + amount)
-        agent_name = world.agents[owner_id].name if owner_id in world.agents else owner_id
+        agent = world.agents.get(owner_id)
+        agent_name = agent.name if agent else owner_id
+        currency = agent.currency if agent else ""
         world.log(f"{agent_name} withdrew {amount:.2f}")
+        world.record_tx("withdraw", "bank", "System Bank", owner_id, agent_name, amount, currency)
 
     def request_loan(self, world_id: str, owner_id: str, amount: float) -> str:
         world = self.get_world(world_id)
         loan = world.bank.issue_loan(owner_id, amount)
         self.transfer_bank_to_wallet(world_id, owner_id, amount)
-        agent_name = world.agents[owner_id].name if owner_id in world.agents else owner_id
+        agent = world.agents.get(owner_id)
+        agent_name = agent.name if agent else owner_id
+        currency = agent.currency if agent else ""
         world.log(f"{agent_name} borrowed {amount:.2f}")
+        world.record_tx("loan_issued", "bank", "System Bank", owner_id, agent_name, amount, currency,
+                        {"loan_id": loan.id, "interest_rate": loan.interest_rate,
+                         "principal": loan.amount, "remaining": loan.remaining})
         return loan.id
 
     def repay_loan(self, world_id: str, owner_id: str, loan_id: str, amount: float) -> None:
         world = self.get_world(world_id)
+        loan = world.bank.loans.get(loan_id)
+        loan_details = {"loan_id": loan_id}
+        if loan:
+            loan_details.update({"interest_rate": loan.interest_rate,
+                                 "principal": loan.amount, "remaining_before": loan.remaining})
         self.transfer_wallet_to_bank(world_id, owner_id, amount)
         world.bank.repay_loan(owner_id, loan_id, amount)
-        agent_name = world.agents[owner_id].name if owner_id in world.agents else owner_id
+        agent = world.agents.get(owner_id)
+        agent_name = agent.name if agent else owner_id
+        currency = agent.currency if agent else ""
+        remaining_after = 0.0
+        updated_loan = world.bank.loans.get(loan_id)
+        if updated_loan:
+            remaining_after = updated_loan.remaining
+        loan_details["remaining_after"] = remaining_after
+        loan_details["fully_repaid"] = updated_loan is None
         world.log(f"{agent_name} repaid {amount:.2f}")
+        world.record_tx("loan_repaid", owner_id, agent_name, "bank", "System Bank", amount, currency, loan_details)
 
     def tick(self, world_id: str, steps: int = 1) -> World:
         world = self.get_world(world_id)
@@ -276,6 +303,9 @@ class WorldEngine:
                 ledger.charge_reasoning(agent.id, external=True)
                 world.total_energy_burned += ENERGY_CONFIG.external_reasoning_cost
                 agent.core_energy = ledger.balance_of(agent.id)
+                world.record_tx("energy_burn", agent.id, agent.name, "system", "EnergyCore System",
+                                ENERGY_CONFIG.external_reasoning_cost, "EC",
+                                {"reason": "AI reasoning cost"})
             except Exception:
                 agent.decision_log.append(f"[tick {world.tick_count}] idle: EnergyCore depleted during reasoning")
                 continue
@@ -332,6 +362,9 @@ class WorldEngine:
                 agent.core_energy = ledger.balance_of(agent.id)
                 world.total_energy_supply -= amount
                 world.log(f"[AI] {agent.name} acquired {amount:.1f} EnergyCore for {cost:.0f} {agent.currency} ({reasoning})")
+                world.record_tx("acquire_energy", agent.id, agent.name, "system", "EnergyCore Market",
+                                amount, "EC", {"cost_currency": cost, "price_per_unit": world.energy_price,
+                                               "currency": agent.currency})
 
         elif action == "generate_revenue":
             if company:
@@ -339,10 +372,15 @@ class WorldEngine:
                 company.cash += revenue
                 agent.wallet += revenue * 0.3
                 world.log(f"[AI] {agent.name} generated {revenue:.0f} revenue via {company.name} ({reasoning})")
+                world.record_tx("revenue", company.id, company.name, agent.id, agent.name,
+                                revenue * 0.3, agent.currency,
+                                {"total_revenue": revenue, "agent_share": 0.3, "company": company.name})
             else:
                 wage = min(amount, 5.0)
                 agent.wallet += wage
                 world.log(f"[AI] {agent.name} earned {wage:.1f} {agent.currency} through labor ({reasoning})")
+                world.record_tx("labor_income", "economy", "Labor Market", agent.id, agent.name,
+                                wage, agent.currency)
 
         elif action == "deposit":
             deposit_amt = min(amount, agent.wallet * 0.8)
@@ -355,7 +393,8 @@ class WorldEngine:
 
         elif action == "withdraw":
             try:
-                self.transfer_bank_to_wallet(world.id, agent.id, min(amount, 500))
+                withdraw_amt = min(amount, 500)
+                self.transfer_bank_to_wallet(world.id, agent.id, withdraw_amt)
                 world.log(f"[AI] {agent.name} withdrew funds ({reasoning})")
             except ValueError:
                 pass
@@ -392,6 +431,8 @@ class WorldEngine:
                 agent.wallet -= invest
                 company.cash += invest
                 world.log(f"[AI] {agent.name} invested {invest:.0f} in {company.name} ({reasoning})")
+                world.record_tx("investment", agent.id, agent.name, company.id, company.name,
+                                invest, agent.currency)
 
         elif action == "hire_worker" and company:
             company.cash += company.productivity * 5
@@ -400,8 +441,11 @@ class WorldEngine:
         elif action == "set_interest_rate" and agent.agent_type == "central_bank":
             try:
                 new_rate = max(0.001, min(0.1, amount / 100))
+                old_rate = world.bank.base_interest_rate
                 world.bank.base_interest_rate = new_rate
                 world.log(f"[AI] {agent.name} set interest rate to {new_rate*100:.1f}% ({reasoning})")
+                world.record_tx("interest_rate_change", agent.id, agent.name, "bank", "System Bank",
+                                new_rate, "", {"old_rate": old_rate, "new_rate": new_rate})
             except Exception:
                 pass
 
@@ -410,6 +454,8 @@ class WorldEngine:
                 agent.wallet -= amount
                 world.bank.reserve += amount
                 world.log(f"[AI] {agent.name} injected {amount:.0f} liquidity into banking system ({reasoning})")
+                world.record_tx("liquidity_injection", agent.id, agent.name, "bank", "System Bank",
+                                amount, agent.currency)
 
         else:
             if agent.company_id and company:
@@ -448,6 +494,9 @@ class WorldEngine:
                     owner.wallet += dividend
                     company.cash -= dividend
                     world.log(f"{company.name} produced ({revenue:.0f} revenue, {dividend:.0f} dividend to {owner.name})")
+                    world.record_tx("dividend", company.id, company.name, owner.id, owner.name,
+                                    dividend, owner.currency,
+                                    {"revenue": revenue, "energy_cost": energy_cost, "productivity": company.productivity})
             else:
                 company.cash += company.productivity * 2
                 world.log(f"{company.name} operated at reduced capacity")

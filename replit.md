@@ -49,14 +49,29 @@ An AI multi-agent economic system where Claude AI agents make real economic deci
 - AI tick limit: 10 agents per tick (random subset) for performance
 - Total: ~121 agents
 
-## Dashboard Features
-- **Flat World Map**: Leaflet.js planisphere, agent markers with type-based colors and size proportional to value
-- **Agent Explorer**: Search/filter/sort by type, currency, EnergyCore, influence. Agent profile with wealth chart, decisions, bank balance
+## Dashboard Features (5 Views)
+- **Map View**: Leaflet.js planisphere, agent markers with type-based colors and size proportional to value, live event feed
+- **Agent Explorer**: Search/filter/sort by type, currency, EnergyCore, influence. Tabbed agent profile (Overview with wealth chart, Transactions, Loans with terms, Actions/decision log). Fade animation on agent switch
+- **Wallets View**: Table of all agent wallets with currency balance, bank balance, EnergyCore, simulated public address and private key (click to reveal)
+- **Transactions View**: Chronological expandable transaction cards with type badges (color-coded), from/to agents, amounts. Click to expand for full details (loan terms, energy prices, etc.). Filter by type and agent
 - **Economy Dashboard**: Money supply, total EnergyCore, energy burned, Gini index, alive/dead agents, bank reserve, currencies, leaderboard
-- **Simulation Controls**: Create world, Start/Pause/Stop, manual tick
+- **Simulation Controls**: Create World button + Run/Stop toggle (green Run / red Stop)
 - **Live Feed**: Real-time economic events from /api/events/feed
 - **Auto-polling**: State refreshes every 4 seconds
 - **Design**: Light theme, glassmorphism, Inter font, responsive (desktop/tablet/mobile)
+
+## API Endpoints
+- `GET /api/simulation/state` — Current world state with all agents
+- `POST /api/simulation/control` — Actions: create_world, start, stop, tick
+- `GET /api/agents` — List all agents
+- `GET /api/agents/{id}` — Agent detail with loans and transactions
+- `GET /api/wallets` — All agent wallets with simulated keys
+- `GET /api/transactions` — Structured transactions (filters: agent_id, type, limit)
+- `GET /api/economy` — Economy metrics and leaderboard
+- `GET /api/events/feed` — Live event feed
+
+## Transaction Types
+deposit, withdraw, loan_issued, loan_repaid, acquire_energy, energy_burn, revenue, labor_income, dividend, company_create, investment, liquidity_injection, interest_rate_change
 
 ## Running
 ```

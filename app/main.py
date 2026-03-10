@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.api.monitoring import router as monitoring_router
 from app.api_gateway.gateway import gateway_router
+import hashlib
 from app.models import COUNTRY_COORDS, COUNTRIES, SYSTEM_CURRENCIES
 from app.simulation import WorldEngine
 
@@ -302,7 +303,71 @@ def get_agent_profile(agent_id: str) -> dict:
         "decision_log": agent.decision_log,
         "company": {"id": company.id, "name": company.name, "cash": round(company.cash, 2), "productivity": round(company.productivity, 2)} if company else None,
         "bank_balance": round(world.bank.accounts.get(agent.id, type("", (), {"balance": 0})).balance, 2),
+        "loans": [{
+            "id": l.id,
+            "principal": round(l.amount, 2),
+            "interest_rate": l.interest_rate,
+            "remaining": round(l.remaining, 2),
+        } for l in world.bank.get_loans(agent.id)],
+        "transactions": [tx.to_dict() for tx in world.transactions
+                         if tx.from_id == agent.id or tx.to_id == agent.id][-50:],
     }
+
+
+def _generate_wallet_keys(agent_id: str) -> dict:
+    seed = hashlib.sha256(agent_id.encode()).hexdigest()
+    private_key = "0x" + hashlib.sha256(("pk_" + seed).encode()).hexdigest()
+    public_address = "0x" + hashlib.sha256(("addr_" + seed).encode()).hexdigest()[:40]
+    return {"private_key": private_key, "public_address": public_address}
+
+
+@app.get("/api/wallets")
+def get_wallets() -> dict:
+    global _active_world_id
+    wid = _active_world_id or (list(engine.worlds.keys())[-1] if engine.worlds else None)
+    if not wid or wid not in engine.worlds:
+        return {"wallets": []}
+    world = engine.worlds[wid]
+    ledger = engine.get_ledger(wid)
+    wallets = []
+    for a in world.agents.values():
+        energy = ledger.balance_of(a.id)
+        keys = _generate_wallet_keys(a.id)
+        bank_acct = world.bank.accounts.get(a.id)
+        wallets.append({
+            "id": a.id,
+            "name": a.name,
+            "type": a.agent_type,
+            "currency": a.currency,
+            "wallet_balance": round(a.wallet, 2),
+            "bank_balance": round(bank_acct.balance, 2) if bank_acct else 0.0,
+            "core_energy": round(energy, 2),
+            "total_value": round(a.wallet + energy * world.energy_price, 2),
+            "alive": a.alive,
+            "private_key": keys["private_key"],
+            "public_address": keys["public_address"],
+        })
+    wallets.sort(key=lambda w: w["total_value"], reverse=True)
+    return {"wallets": wallets, "tick": world.tick_count}
+
+
+@app.get("/api/transactions")
+def get_transactions(agent_id: str = None, tx_type: str = None, limit: int = 200) -> dict:
+    global _active_world_id
+    wid = _active_world_id or (list(engine.worlds.keys())[-1] if engine.worlds else None)
+    if not wid or wid not in engine.worlds:
+        return {"transactions": [], "tick": 0}
+    world = engine.worlds[wid]
+    txs = world.transactions
+    if agent_id:
+        txs = [tx for tx in txs if tx.from_id == agent_id or tx.to_id == agent_id]
+    if tx_type:
+        txs = [tx for tx in txs if tx.tx_type == tx_type]
+    filtered_total = len(txs)
+    result = [tx.to_dict() for tx in txs[-limit:]]
+    result.reverse()
+    return {"transactions": result, "tick": world.tick_count,
+            "total_count": filtered_total}
 
 
 @app.get("/api/economy")
