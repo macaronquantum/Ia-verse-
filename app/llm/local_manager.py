@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import httpx
 
 from app.config import settings
 from app.llm.provider_local_vllm import VLLMClient
@@ -21,6 +24,24 @@ class ModelSpec:
     backend: str = "vllm"
     path: str | None = None
     memory_estimate_gb: float = 8.0
+
+
+class OllamaClient:
+    def __init__(self, host: str | None = None) -> None:
+        self.host = host or settings.OLLAMA_HOST
+
+    async def pull(self, model: str) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=120) as client:
+            r = await client.post(f"{self.host}/api/pull", json={"name": model, "stream": False})
+            r.raise_for_status()
+            return r.json()
+
+    async def infer(self, prompt: str, model: str, **kwargs: Any) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=kwargs.get("timeout", 30)) as client:
+            r = await client.post(f"{self.host}/api/generate", json={"model": model, "prompt": prompt, "stream": False})
+            r.raise_for_status()
+            j = r.json()
+            return {"text": j.get("response", ""), "usage": {"completion_tokens": j.get("eval_count", 0)}}
 
 
 class LocalModelManager:
@@ -39,6 +60,11 @@ class LocalModelManager:
         spec = self.registry[model_name]
         model_dir = self.cache_dir / model_name
         model_dir.mkdir(parents=True, exist_ok=True)
+
+        if spec.backend == "ollama" or spec.source == "ollama":
+            client = OllamaClient()
+            await client.pull(spec.repo)
+
         meta = {
             "name": spec.name,
             "source": spec.source,
@@ -49,9 +75,17 @@ class LocalModelManager:
         (model_dir / "model.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
         return str(model_dir)
 
+    def install_model(self, name: str, source: str, repo: str, backend: str = "ollama") -> ModelSpec:
+        spec = ModelSpec(name=name, source=source, repo=repo, backend=backend)
+        self.registry[name] = spec
+        self._semaphores[name] = asyncio.Semaphore(self.max_concurrency)
+        return spec
+
     def _load_backend(self, spec: ModelSpec) -> Any:
         if spec.backend == "vllm":
             return VLLMClient()
+        if spec.backend == "ollama":
+            return OllamaClient()
 
         class _Fallback:
             async def infer(self, prompt: str, **kwargs: Any) -> dict[str, Any]:
@@ -64,6 +98,14 @@ class LocalModelManager:
             return
         spec = self.registry[model_name]
         self._clients[model_name] = self._load_backend(spec)
+
+    def switch_model(self, current: str, candidate: str) -> str:
+        if candidate not in self.registry:
+            raise ValueError(f"unknown model: {candidate}")
+        if current in self._clients:
+            self._clients.pop(current, None)
+        self.ensure_loaded(candidate)
+        return candidate
 
     async def infer(
         self,
@@ -86,3 +128,9 @@ class LocalModelManager:
                 timeout=timeout,
             )
             return await asyncio.wait_for(call, timeout=timeout)
+
+    def serve_model_locally(self, model_name: str) -> subprocess.Popen[str]:
+        spec = self.registry[model_name]
+        if spec.backend != "ollama":
+            raise ValueError("serve_model_locally currently supports ollama backend")
+        return subprocess.Popen(["ollama", "run", spec.repo], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)

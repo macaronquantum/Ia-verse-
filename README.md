@@ -110,3 +110,23 @@ python -m pytest -q
 - Frontend only shows public key by default.
 - Private key reveal is explicit opt-in and audited.
 - Prefer HSM/remote signer for production.
+
+## Production Upgrade: Autonomous Crypto Economy
+
+This repository now ships production integrations for:
+- Solana wallet lifecycle (`create_wallet`, `get_balance`, `sign_transaction`, `send_transaction`, `confirm_transaction`) with encrypted key storage.
+- On-chain settlement batching and retry-based confirmation flow.
+- Crypto payment intake via Coinbase Commerce (charge creation + verification).
+- Real browser automation via Playwright for website workflows.
+- Human marketplace connectors orchestrated through Upwork/Fiverr browser flows.
+- AI marketplace bootstrap (`Hugging Face`) and persistent agent-shared tool registry.
+- Local model operations with Ollama pull/infer plus dynamic model install/switch.
+
+### Required production environment variables
+- `WALLET_MASTER_KEY`
+- `OPERATOR_PASSPHRASE`
+- `SOLANA_RPC_URL`
+- `COINBASE_COMMERCE_API_KEY`
+- `OLLAMA_HOST`
+
+Without these secrets the corresponding production connectors fail closed.

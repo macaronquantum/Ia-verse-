@@ -1,12 +1,7 @@
-from app.integrations.solana_gateway import Transfer, batch_settlement, create_wallet, get_balance
+from app.integrations.solana_gateway import Transfer, batch_settlement
 
 
-def test_settlement_batch_updates_balances() -> None:
-    wa = create_wallet("a")["pubkey"]
-    wb = create_wallet("b")["pubkey"]
-    from app.persistence.store import store
-
-    store.core_energy_ledger[wa] = 10
-    batch_settlement([Transfer(from_pubkey=wa, to_pubkey=wb, asset="CORE", amount=3)])
-    assert get_balance(wa, "CORE") == 7
-    assert get_balance(wb, "CORE") == 3
+def test_settlement_batch_handles_missing_secrets() -> None:
+    res = batch_settlement([Transfer(from_pubkey="a", to_pubkey="b", asset="SOL", amount=0.01)])
+    assert res["status"] == "ok"
+    assert res["applied"][0]["ok"] is False

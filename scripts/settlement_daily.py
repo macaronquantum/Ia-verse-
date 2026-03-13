@@ -11,7 +11,7 @@ def run_daily_settlement(receipt_dir: str = "receipts") -> dict:
     if len(central_wallets) < 2:
         return {"status": "noop", "reason": "not bootstrapped"}
 
-    transfers = [Transfer(from_pubkey=central_wallets[0], to_pubkey=central_wallets[1], asset="CORE", amount=1.0)]
+    transfers = [Transfer(from_pubkey=central_wallets[0], to_pubkey=central_wallets[1], asset="SOL", amount=0.001)]
     result = batch_settlement(transfers)
     receipt = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -23,9 +23,10 @@ def run_daily_settlement(receipt_dir: str = "receipts") -> dict:
     return receipt
 
 
-def run_settlement(transfers: list | None = None, dev_mode: bool = False):
-    if dev_mode:
-        return [{"ok": True, **(t or {})} for t in (transfers or [])]
+def run_settlement(transfers: list[dict] | None = None) -> list[dict] | dict:
+    if transfers:
+        typed = [Transfer(from_pubkey=t["from"], to_pubkey=t["to"], asset=t.get("asset", "SOL"), amount=float(t["amount"])) for t in transfers]
+        return batch_settlement(typed)
     return run_daily_settlement()
 
 
