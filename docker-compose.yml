@@ -2,7 +2,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: api/Dockerfile
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-iaverse}}
@@ -34,7 +34,7 @@ services:
   workers:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: api/Dockerfile
     command: ["python3.11", "run_worker.py"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-iaverse}}
@@ -47,9 +47,9 @@ services:
     depends_on:
       api:
         condition: service_healthy
-      redis:
-        condition: service_healthy
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python3.11 -c 'import os,redis; redis.Redis.from_url(os.environ[\"REDIS_URL\"]).ping()'"]
@@ -64,8 +64,6 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-iaverse}
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -77,8 +75,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -89,17 +85,15 @@ services:
 
   frontend:
     build:
-      context: ./web
+      context: ./frontend
       dockerfile: Dockerfile
-      args:
-        API_UPSTREAM: ${FRONTEND_API_UPSTREAM:-api:8000}
     ports:
       - "3000:80"
     depends_on:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost/"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost/health"]
       interval: 15s
       timeout: 5s
       retries: 5
