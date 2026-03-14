@@ -1,126 +1,37 @@
 version: "3.9"
 
 services:
-  api:
-    build:
-      context: .
-      dockerfile: api/Dockerfile
-    container_name: iaverse_api
-    command:
-      - /bin/sh
-      - -c
-      - |
-        echo "Frontend: http://http://151.247.197.181:3000"
-        echo "API docs: http://http://151.247.197.181:8000/docs"
-        exec uvicorn app.main:app --host 0.0.0.0 --port 8000
-    restart: always
-    environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-iaverse}}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      API_BASE_URL: ${API_BASE_URL:-http://api:8000}
-      WALLET_MASTER_KEY: ${WALLET_MASTER_KEY:-dev-master-key-change-me}
-      MODEL_CACHE_DIR: ${MODEL_CACHE_DIR:-/var/models}
-      MODEL_MAX_CONCURRENCY: ${MODEL_MAX_CONCURRENCY:-4}
-      EXTERNAL_DECISION_RATE: ${EXTERNAL_DECISION_RATE:-0.10}
-      LOCAL_MODEL_TIMEOUT: ${LOCAL_MODEL_TIMEOUT:-20}
-      EXTERNAL_MODEL_TIMEOUT: ${EXTERNAL_MODEL_TIMEOUT:-60}
-      ALLOW_PRIVATE_KEY_FRONTEND: ${ALLOW_PRIVATE_KEY_FRONTEND:-false}
-    volumes:
-      - model_cache:/var/models
-    ports:
-      - "8000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 15s
-
-  workers:
-    build:
-      context: .
-      dockerfile: api/Dockerfile
-    container_name: iaverse_workers
-    command: ["python3.11", "run_worker.py"]
-    restart: always
-    environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-iaverse}}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      API_BASE_URL: ${API_BASE_URL:-http://api:8000}
-      WORKER_COUNT: ${WORKER_COUNT:-4}
-      MODEL_CACHE_DIR: ${MODEL_CACHE_DIR:-/var/models}
-      SIMULATION_POLL_SECONDS: ${SIMULATION_POLL_SECONDS:-5}
-    volumes:
-      - model_cache:/var/models
-    depends_on:
-      api:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "python3.11 -c 'import os,redis; redis.Redis.from_url(os.environ[\"REDIS_URL\"]).ping()'"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-
-  postgres:
-    image: postgres:16-alpine
-    container_name: iaverse_postgres
-    restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-iaverse}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-iaverse}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-
-  redis:
-    image: redis:7-alpine
-    container_name: iaverse_redis
-    restart: always
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 10
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: iaverse_frontend
-    restart: always
-    environment:
-      API_URL: ${API_URL:-http://localhost:8000}
+    build: ./frontend
     ports:
       - "3000:80"
     depends_on:
-      api:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+      - api
+
+  api:
+    build: ./api
+    ports:
+      - "8000:8000"
+
+  redis:
+    image: redis:7-alpine
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: iaverse
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  workers:
+    build: ./workers
+    depends_on:
+      - api
+      - redis
+      - postgres
 
 volumes:
   postgres_data:
-  model_cache:
-  redis_data:
