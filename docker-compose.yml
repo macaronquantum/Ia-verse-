@@ -10,8 +10,8 @@ services:
       - /bin/sh
       - -c
       - |
-        echo "Frontend: http://SERVER_IP:3000"
-        echo "API docs: http://SERVER_IP:8000/docs"
+        echo "Frontend: http://http://151.247.197.181:3000"
+        echo "API docs: http://http://151.247.197.181:8000/docs"
         exec uvicorn app.main:app --host 0.0.0.0 --port 8000
     restart: always
     environment:
