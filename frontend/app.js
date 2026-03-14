@@ -8,6 +8,7 @@ let walletsData = [];
 let transactionsData = [];
 let currentView = 'map';
 let simRunning = false;
+const API_BASE_URL = (window.__APP_CONFIG__ && window.__APP_CONFIG__.API_URL) || 'http://localhost:8000';
 
 function switchView(name) {
   currentView = name;
@@ -37,7 +38,8 @@ function fmt(n) {
 
 async function api(url, data) {
   const opts = data ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) } : {};
-  const res = await fetch(url, opts);
+  const path = url.startsWith('/') ? url : `/${url}`;
+  const res = await fetch(`${API_BASE_URL}${path}`, opts);
   return res.json();
 }
 

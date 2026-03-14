@@ -55,6 +55,27 @@ Les volumes Docker suivants sont configurés:
 - Les variables d'environnement sont centralisées dans `.env` (voir `.env.example`).
 - `start.sh` reste utile en mode local, mais n'est plus nécessaire pour le workflow Docker complet.
 
+## Deployment
+
+Start system:
+
+```bash
+docker compose up -d --build
+```
+
+Update system:
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+View logs:
+
+```bash
+docker compose logs -f
+```
+
 ## Lancer le serveur
 
 ```bash
