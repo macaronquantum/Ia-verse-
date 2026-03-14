@@ -12,3 +12,9 @@ RUN mkdir -p /usr/share/nginx/html/static && \
 
 EXPOSE 80
 ENTRYPOINT ["/entrypoint.sh"]
+frontend:
+  build: ./frontend
+  ports:
+    - "3000:80"
+  environment:
+    - SERVER_IP=151.247.197.181
