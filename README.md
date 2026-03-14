@@ -21,6 +21,40 @@ pour survivre elles ont besoin de energy core, pour cela elle doivent generer de
 - **Moteur de simulation** par ticks (un tick = un cycle économique).
 - **API REST FastAPI** pour manipuler le monde et lancer la simulation.
 
+
+## Exécution complète avec Docker (mode recommandé)
+
+Le projet peut maintenant tourner entièrement via Docker (frontend + API + workers + Redis + PostgreSQL) avec une seule commande.
+
+### Démarrage
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+### Services exposés
+- Frontend UI: `http://localhost:3000`
+- API FastAPI: `http://localhost:8000`
+- Documentation API: `http://localhost:8000/docs`
+
+### Services lancés par `docker compose up --build`
+- `frontend` (Nginx, dashboard `web/`)
+- `api` (FastAPI)
+- `workers` (`python run_worker.py`)
+- `redis` (`redis:7-alpine`)
+- `postgres` (`postgres:16-alpine`)
+
+### Persistance
+Les volumes Docker suivants sont configurés:
+- `postgres_data` pour les données PostgreSQL
+- `model_cache` pour le cache des modèles
+- `redis_data` pour les données Redis
+
+### Notes
+- Les dépendances inter-services utilisent `depends_on` + `healthcheck` pour un démarrage plus fiable.
+- Les variables d'environnement sont centralisées dans `.env` (voir `.env.example`).
+- `start.sh` reste utile en mode local, mais n'est plus nécessaire pour le workflow Docker complet.
+
 ## Lancer le serveur
 
 ```bash
