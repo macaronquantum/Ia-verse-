@@ -1,9 +1,19 @@
+version: "3.9"
+
 services:
   api:
     build:
       context: .
       dockerfile: api/Dockerfile
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    container_name: iaverse_api
+    command:
+      - /bin/sh
+      - -c
+      - |
+        echo "Frontend: http://SERVER_IP:3000"
+        echo "API docs: http://SERVER_IP:8000/docs"
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+    restart: always
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-iaverse}}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
@@ -35,13 +45,16 @@ services:
     build:
       context: .
       dockerfile: api/Dockerfile
+    container_name: iaverse_workers
     command: ["python3.11", "run_worker.py"]
+    restart: always
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-iaverse}}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       API_BASE_URL: ${API_BASE_URL:-http://api:8000}
       WORKER_COUNT: ${WORKER_COUNT:-4}
       MODEL_CACHE_DIR: ${MODEL_CACHE_DIR:-/var/models}
+      SIMULATION_POLL_SECONDS: ${SIMULATION_POLL_SECONDS:-5}
     volumes:
       - model_cache:/var/models
     depends_on:
@@ -60,6 +73,8 @@ services:
 
   postgres:
     image: postgres:16-alpine
+    container_name: iaverse_postgres
+    restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -75,6 +90,8 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: iaverse_redis
+    restart: always
     volumes:
       - redis_data:/data
     healthcheck:
@@ -87,6 +104,10 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    container_name: iaverse_frontend
+    restart: always
+    environment:
+      API_URL: ${API_URL:-http://localhost:8000}
     ports:
       - "3000:80"
     depends_on:
